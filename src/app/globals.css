@@ -2,26 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+:root { color-scheme: dark; }
+
+html, body {
+  @apply bg-slate-950 text-slate-100;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Shared form primitives used across the auth + app screens. */
+@layer components {
+  .field {
+    @apply w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white
+      placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/60;
   }
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50;
   }
+  .btn-primary { @apply btn bg-indigo-600 hover:bg-indigo-500 text-white; }
+  .btn-ghost { @apply btn bg-slate-800 hover:bg-slate-700 text-slate-200; }
+  .card { @apply bg-slate-900 border border-slate-800 rounded-2xl; }
+  .label { @apply block text-xs font-medium text-slate-400 mb-1; }
 }

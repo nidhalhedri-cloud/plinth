@@ -1,0 +1,353 @@
+// Developer CRM — multi-tenant SaaS for Dubai real-estate DEVELOPERS.
+// Every tenant-scoped table carries `companyId`; isolation is enforced in src/lib/tenant.ts
+// (a Prisma Client extension that injects/validates companyId on every query) — see §5.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── tenancy & people ───────────────────────────
+
+enum Role {
+  PLATFORM_ADMIN // cross-tenant (no company)
+  COMPANY_ADMIN  // one developer company
+  RM             // relationship / sales manager
+}
+
+model Company {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  tradeLicenseUrl     String?
+  logoUrl             String?
+  brandColor          String?  @default("#2563eb")
+  primaryContactName  String?
+  primaryContactEmail String?
+  subscriptionStatus  String   @default("trialing")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  users        User[]
+  invites      Invite[]
+  brokerages   Brokerage[]
+  projects     Project[]
+  layouts      Layout[]
+  units        Unit[]
+  paymentPlans PaymentPlan[]
+  feeSettings  FeeSetting[]
+  offers       Offer[]
+  waSendLogs   WhatsappSendLog[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String?  // null only for PLATFORM_ADMIN
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String?
+  role         Role     @default(RM)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company        Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitesSent    Invite[]         @relation("InvitedBy")
+  brokerageLinks BrokerageLink[]
+  offers         Offer[]
+  waSession      WhatsappSession?
+  waSendLogs     WhatsappSendLog[]
+
+  @@index([companyId])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  companyId   String
+  email       String
+  role        Role      @default(RM)
+  token       String    @unique
+  invitedById String?
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User?   @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([email])
+}
+
+// ─────────────────────────── brokerages & WhatsApp groups ───────────────────────────
+
+model Brokerage {
+  id            String   @id @default(cuid())
+  companyId     String
+  name          String
+  reraNumber    String?
+  contactPerson String?
+  phone         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  links   BrokerageLink[]
+  offers  Offer[]
+
+  @@index([companyId])
+}
+
+// One brokerage may be linked to several RMs, each with their own WhatsApp group.
+model BrokerageLink {
+  id                String   @id @default(cuid())
+  companyId         String
+  brokerageId       String
+  rmUserId          String
+  whatsappGroupJid  String? // Baileys group JID (…@g.us) — stored instead of a phone number
+  whatsappGroupName String?
+  createdAt         DateTime @default(now())
+
+  brokerage Brokerage @relation(fields: [brokerageId], references: [id], onDelete: Cascade)
+  rm        User      @relation(fields: [rmUserId], references: [id], onDelete: Cascade)
+
+  @@unique([brokerageId, rmUserId])
+  @@index([companyId])
+}
+
+// ─────────────────────────── projects, layouts, inventory ───────────────────────────
+
+model Project {
+  id              String   @id @default(cuid())
+  companyId       String
+  name            String
+  location        String?
+  handoverDefault String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  layouts Layout[]
+  units   Unit[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// A typology (e.g. "1BR-A") — one floor-plan image per code per project, auto-matched to units.
+model Layout {
+  id           String   @id @default(cuid())
+  companyId    String
+  projectId    String
+  code         String
+  bedrooms     Int?
+  bathrooms    Int?
+  sizeMin      Int?
+  sizeMax      Int?
+  imageUrl     String?
+  imageVersion Int      @default(1) // bumped on replace; offers snapshot the version they used
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, code])
+  @@index([companyId])
+}
+
+enum UnitStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  BLOCKED
+}
+
+model Unit {
+  id            String     @id @default(cuid())
+  companyId     String
+  projectId     String
+  unitNumber    String
+  layoutCode    String
+  floor         Int?
+  sizeSqft      Int?
+  view          String?
+  priceAed      Decimal    @db.Decimal(14, 2)
+  paymentPlanId String?
+  handover      String?
+  status        UnitStatus @default(AVAILABLE)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  paymentPlan PaymentPlan? @relation(fields: [paymentPlanId], references: [id], onDelete: SetNull)
+  offers      Offer[]
+
+  @@unique([projectId, unitNumber])
+  @@index([companyId])
+  @@index([companyId, status])
+}
+
+// ─────────────────────────── payment plans & fees ───────────────────────────
+
+model PaymentPlan {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  isPreset    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  milestones PaymentMilestone[]
+  units      Unit[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+enum MilestoneTrigger {
+  ON_BOOKING
+  ON_OQOOD // DLD registration
+  CONSTRUCTION_PCT // triggerValue = percent complete
+  ON_HANDOVER
+  POST_HANDOVER // triggerValue = months after handover
+  FIXED_DATE // triggerValue = ISO date
+}
+
+model PaymentMilestone {
+  id            String           @id @default(cuid())
+  companyId     String
+  paymentPlanId String
+  order         Int
+  label         String
+  percent       Decimal?         @db.Decimal(6, 3) // % of price, OR
+  fixedAmount   Decimal?         @db.Decimal(14, 2) // a fixed AED amount
+  trigger       MilestoneTrigger @default(ON_BOOKING)
+  triggerValue  String? // percent / months / ISO date depending on trigger
+  createdAt     DateTime         @default(now())
+
+  paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([paymentPlanId])
+}
+
+enum FeeKind {
+  PERCENT
+  FIXED
+}
+
+enum FeePayer {
+  BUYER
+  SELLER
+  SPLIT
+}
+
+// Company-level fee lines (DLD 4%, Oqood, trustee, NOC, custom). projectId set = per-project override.
+model FeeSetting {
+  id        String   @id @default(cuid())
+  companyId String
+  projectId String? // null = company default
+  label     String
+  kind      FeeKind  @default(FIXED)
+  value     Decimal  @db.Decimal(14, 3) // percent (e.g. 4) or AED amount
+  payer     FeePayer @default(BUYER)
+  taxable   Boolean  @default(false)
+  sortOrder Int      @default(0)
+  isSystem  Boolean  @default(false) // seeded DLD/Oqood defaults
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+// ─────────────────────────── offers / reservation forms (= the deal record) ───────────────────────────
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  VIEWED
+  RESERVED
+  SPA_SIGNED
+  SOLD
+  DROPPED
+}
+
+model Offer {
+  id           String      @id @default(cuid())
+  companyId    String
+  unitId       String
+  brokerageId  String?
+  rmUserId     String
+  publicToken  String      @unique // open, trackable web-link
+  status       OfferStatus @default(DRAFT)
+  priceAed     Decimal     @db.Decimal(14, 2)
+  discountAed  Decimal?    @db.Decimal(14, 2)
+  note         String?
+  // Full computed offer at finalize time (unit specs, layout image + version, schedule, fees) so a
+  // later template/fee/layout change never mutates an already-sent offer.
+  snapshot     Json?
+  pdfUrl       String?
+  viewCount    Int         @default(0)
+  firstViewedAt DateTime?
+  sentAt       DateTime?
+  reservedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  unit      Unit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  brokerage Brokerage? @relation(fields: [brokerageId], references: [id], onDelete: SetNull)
+  rm        User       @relation(fields: [rmUserId], references: [id], onDelete: Cascade)
+  sendLogs  WhatsappSendLog[]
+
+  @@index([companyId])
+  @@index([companyId, status])
+}
+
+// ─────────────────────────── WhatsApp (Baileys) — Phase 6 ───────────────────────────
+
+model WhatsappSession {
+  id          String   @id @default(cuid())
+  rmUserId    String   @unique
+  companyId   String
+  status      String   @default("disconnected")
+  authState   Json? // Baileys multi-file auth state, persisted so RMs don't re-scan each deploy
+  phoneNumber String?
+  updatedAt   DateTime @updatedAt
+
+  rm User @relation(fields: [rmUserId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model WhatsappSendLog {
+  id          String   @id @default(cuid())
+  companyId   String
+  rmUserId    String
+  brokerageId String?
+  offerId     String?
+  groupJid    String
+  caption     String?
+  kind        String   @default("PDF")
+  status      String   @default("SENT")
+  error       String?
+  createdAt   DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rm      User    @relation(fields: [rmUserId], references: [id], onDelete: Cascade)
+  offer   Offer?  @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([rmUserId])
+}
