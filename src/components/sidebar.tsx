@@ -12,7 +12,7 @@ type Item = { href: string; label: string; icon: typeof LayoutDashboard; adminOn
 
 const NAV: Item[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/inventory', label: 'Inventory', icon: Boxes, soon: true },
+  { href: '/inventory', label: 'Inventory', icon: Boxes },
   { href: '/layouts', label: 'Layouts', icon: Layers, soon: true },
   { href: '/plans', label: 'Payment plans', icon: Wallet, adminOnly: true, soon: true },
   { href: '/fees', label: 'Fees', icon: Receipt, adminOnly: true, soon: true },
