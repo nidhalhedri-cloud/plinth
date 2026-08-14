@@ -42,6 +42,24 @@ model Company {
   feeSettings  FeeSetting[]
   offers       Offer[]
   waSendLogs   WhatsappSendLog[]
+  assets       Asset[]
+}
+
+// Binary storage in Postgres — layout floor plans, company logos, generated offer PDFs. Keeps the
+// greenfield app self-contained (no S3 to provision); swap for object storage later behind the same
+// /api/assets/[id] URL. Served through that route with the stored mime type.
+model Asset {
+  id        String   @id @default(cuid())
+  companyId String
+  kind      String   @default("layout") // layout | logo | offer_pdf
+  mime      String
+  bytes     Bytes
+  size      Int
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
 
 model User {
