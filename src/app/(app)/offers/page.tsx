@@ -1,0 +1,186 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { api } from '@/lib/client';
+import { FileText, Plus, Search, Loader2, Download, Link2, Check, X, Eye } from 'lucide-react';
+
+const money = (n: number) => 'AED ' + Math.round(n).toLocaleString('en-AE');
+const STATUS: Record<string, string> = {
+  DRAFT: 'text-slate-400 bg-slate-700/40', SENT: 'text-blue-300 bg-blue-500/15', VIEWED: 'text-indigo-300 bg-indigo-500/15',
+  RESERVED: 'text-amber-300 bg-amber-500/15', SPA_SIGNED: 'text-purple-300 bg-purple-500/15', SOLD: 'text-emerald-300 bg-emerald-500/15', DROPPED: 'text-red-300 bg-red-500/15',
+};
+const STATUSES = ['DRAFT', 'SENT', 'VIEWED', 'RESERVED', 'SPA_SIGNED', 'SOLD', 'DROPPED'];
+
+type Offer = { id: string; publicToken: string; status: string; price: number; discount: number; unit: string; project: string; brokerage: string | null; rm: string; viewCount: number; firstViewedAt: string | null; createdAt: string };
+
+export default function OffersPage() {
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [building, setBuilding] = useState(false);
+  const load = useCallback(() => api<{ offers: Offer[] }>('/api/offers').then(r => setOffers(r.offers)), []);
+  useEffect(() => { load(); }, [load]);
+
+  const setStatus = async (id: string, status: string) => {
+    setOffers(os => os.map(o => o.id === id ? { ...o, status } : o));
+    await api(`/api/offers/${id}`, { method: 'PATCH', json: { status } }).catch(load);
+  };
+
+  return (
+    <div className="max-w-5xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2"><FileText className="w-6 h-6 text-indigo-400" /><h1 className="text-2xl font-bold text-white">Offers</h1></div>
+          <p className="text-slate-400 text-sm mt-1">Generate a branded reservation offer for a unit — auto-filled from inventory, plan &amp; fees.</p>
+        </div>
+        <button className="btn-primary" onClick={() => setBuilding(true)}><Plus className="w-4 h-4" /> New offer</button>
+      </div>
+
+      {building && <OfferBuilder onClose={() => setBuilding(false)} onSaved={() => { setBuilding(false); load(); }} />}
+
+      <div className="card mt-6 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-slate-500 border-b border-slate-800 text-left">
+              <tr><th className="px-4 py-2.5">Unit</th><th className="px-4 py-2.5">Project</th><th className="px-4 py-2.5">Price</th><th className="px-4 py-2.5">Opens</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5"></th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {!offers.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">No offers yet. Create one above.</td></tr>}
+              {offers.map(o => (
+                <tr key={o.id} className="hover:bg-slate-800/30">
+                  <td className="px-4 py-2.5 text-white font-medium">{o.unit}</td>
+                  <td className="px-4 py-2.5 text-slate-400">{o.project}</td>
+                  <td className="px-4 py-2.5 text-slate-200">{money(o.price)}</td>
+                  <td className="px-4 py-2.5 text-slate-400">{o.viewCount > 0 ? <span className="inline-flex items-center gap-1 text-indigo-300"><Eye className="w-3.5 h-3.5" />{o.viewCount}</span> : '—'}</td>
+                  <td className="px-4 py-2.5">
+                    <select value={o.status} onChange={e => setStatus(o.id, e.target.value)}
+                      className={`rounded-full text-[11px] px-2 py-1 border-0 focus:outline-none cursor-pointer ${STATUS[o.status] || ''}`}>
+                      {STATUSES.map(s => <option key={s} value={s} className="bg-slate-900 text-white">{s.replace('_', ' ')}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-1 justify-end">
+                      <a href={`/api/offers/${o.id}/pdf`} target="_blank" title="Open PDF" className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Download className="w-4 h-4" /></a>
+                      <button title="Copy public link" onClick={() => navigator.clipboard.writeText(`${location.origin}/offer/${o.publicToken}`)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Link2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Unit = { id: string; unitNumber: string; project: string | null; priceAed: number; status: string; layoutCode: string };
+type Snapshot = { net: number; price: number; discount: number; plan: { name: string | null }; schedule: { label: string; amount: number; percent: number | null }[]; feesTotalBuyer: number; grandTotal: number; layout: { imageDataUri: string | null } };
+
+function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<Unit[]>([]);
+  const [unit, setUnit] = useState<Unit | null>(null);
+  const [discount, setDiscount] = useState('');
+  const [note, setNote] = useState('');
+  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ id: string; publicToken: string } | null>(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      const sp = new URLSearchParams({ status: 'AVAILABLE' }); if (q.trim()) sp.set('q', q.trim());
+      const r = await api<{ units: Unit[] }>(`/api/inventory/units?${sp}`); setResults(r.units.slice(0, 8));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const preview = useCallback(async (u: Unit, d: string) => {
+    const sp = new URLSearchParams({ unitId: u.id }); if (Number(d) > 0) sp.set('discountAed', d);
+    const r = await api<{ snapshot: Snapshot }>(`/api/offers/prepare?${sp}`); setSnap(r.snapshot);
+  }, []);
+  useEffect(() => { if (unit) { const t = setTimeout(() => preview(unit, discount), 250); return () => clearTimeout(t); } }, [unit, discount, preview]);
+
+  const save = async (mode: 'draft' | 'sent' | 'reserved') => {
+    if (!unit) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await api<{ id: string; publicToken: string }>('/api/offers', {
+        method: 'POST',
+        json: { unitId: unit.id, discountAed: Number(discount) || 0, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
+      });
+      setDone(r);
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+
+  if (done) {
+    const link = `${location.origin}/offer/${done.publicToken}`;
+    return (
+      <div className="card p-5 mt-6 border-emerald-500/30">
+        <div className="flex items-center gap-2 text-emerald-300 font-medium"><Check className="w-5 h-5" /> Offer created</div>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <a href={`/api/offers/${done.id}/pdf`} target="_blank" className="btn-primary"><Download className="w-4 h-4" /> Open PDF</a>
+          <button className="btn-ghost" onClick={() => navigator.clipboard.writeText(link)}><Link2 className="w-4 h-4" /> Copy public link</button>
+          <button className="btn-ghost" onClick={onSaved}>Done</button>
+        </div>
+        <p className="text-xs text-slate-500 mt-3 break-all">{link}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-5 mt-6 border-indigo-500/30">
+      <div className="flex items-center justify-between mb-4"><h3 className="font-semibold text-white">New offer</h3><button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><X className="w-4 h-4" /></button></div>
+
+      {!unit ? (
+        <div>
+          <label className="label">Pick an available unit</label>
+          <div className="relative"><Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" /><input className="field pl-9" placeholder="Search unit #" value={q} onChange={e => setQ(e.target.value)} autoFocus /></div>
+          <div className="mt-2 divide-y divide-slate-800/60 max-h-64 overflow-auto">
+            {results.map(u => (
+              <button key={u.id} onClick={() => setUnit(u)} className="w-full flex items-center justify-between px-2 py-2.5 hover:bg-slate-800/40 rounded-lg text-left">
+                <span className="text-white text-sm">{u.unitNumber} <span className="text-slate-500">· {u.layoutCode} · {u.project}</span></span>
+                <span className="text-slate-300 text-sm">{money(u.priceAed)}</span>
+              </button>
+            ))}
+            {!results.length && <p className="text-slate-500 text-sm px-2 py-3">No available units match.</p>}
+          </div>
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-5">
+          <div>
+            <div className="flex items-center justify-between">
+              <div><p className="text-white font-semibold">{unit.unitNumber}</p><p className="text-xs text-slate-500">{unit.layoutCode} · {unit.project}</p></div>
+              <button className="text-xs text-indigo-400 hover:text-indigo-300" onClick={() => { setUnit(null); setSnap(null); }}>Change</button>
+            </div>
+            <div className="mt-3"><label className="label">Discount (AED)</label><input className="field" type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" /></div>
+            <div className="mt-3"><label className="label">Note (optional)</label><textarea className="field" rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
+            {err && <p className="text-sm text-red-400 mt-3">{err}</p>}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <button className="btn-primary" disabled={busy} onClick={() => save('sent')}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Create &amp; send</button>
+              <button className="btn-ghost" disabled={busy} onClick={() => save('draft')}>Save draft</button>
+              <button className="btn-ghost" disabled={busy} onClick={() => save('reserved')}>Reserve unit</button>
+            </div>
+          </div>
+
+          {/* Live preview */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+            {!snap ? <p className="text-slate-500 text-sm">Loading preview…</p> : (
+              <>
+                {snap.layout.imageDataUri && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={snap.layout.imageDataUri} alt="" className="w-full h-32 object-contain bg-white/5 rounded-lg mb-3" />
+                )}
+                <div className="flex justify-between text-sm"><span className="text-slate-400">List price</span><span className="text-slate-200">{money(snap.price)}</span></div>
+                {snap.discount > 0 && <div className="flex justify-between text-sm"><span className="text-slate-400">Discount</span><span className="text-red-300">- {money(snap.discount)}</span></div>}
+                <div className="flex justify-between text-base font-bold mt-1"><span className="text-white">Purchase price</span><span className="text-indigo-300">{money(snap.net)}</span></div>
+                <p className="text-[11px] text-slate-500 mt-2">{snap.plan.name || 'No payment plan'} · {snap.schedule.length} milestone(s)</p>
+                <div className="border-t border-slate-800 mt-3 pt-2 flex justify-between text-sm"><span className="text-slate-400">+ buyer fees</span><span className="text-slate-300">{money(snap.feesTotalBuyer)}</span></div>
+                <div className="flex justify-between text-sm font-semibold"><span className="text-white">Total</span><span className="text-white">{money(snap.grandTotal)}</span></div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
