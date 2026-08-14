@@ -141,13 +141,16 @@ model BrokerageLink {
 // ─────────────────────────── projects, layouts, inventory ───────────────────────────
 
 model Project {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   companyId       String
   name            String
   location        String?
   handoverDefault String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  // The anchor date for payment scheduling: from the offer/booking date up to handover, milestones
+  // get real calendar dates (and are auto-compressed if the window is short).
+  handoverDate    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   layouts Layout[]

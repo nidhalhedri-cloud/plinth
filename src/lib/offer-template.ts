@@ -76,19 +76,20 @@ export function offerHtml(s: OfferSnapshot, opts?: { offerId?: string; watermark
 
     <h2>Payment schedule</h2>
     <table class="data">
-      <thead><tr><th>Milestone</th><th>When</th><th class="num">%</th><th class="num">Amount</th></tr></thead>
+      <thead><tr><th>Milestone</th><th>Date</th><th>When</th><th class="num">%</th><th class="num">Amount</th></tr></thead>
       <tbody>
-        ${s.schedule.length ? s.schedule.map((m) => `<tr><td>${esc(m.label)}</td><td>${esc(m.when)}</td><td class="num">${m.percent != null ? m.percent + '%' : '—'}</td><td class="num">${aed(m.amount)}</td></tr>`).join('')
-          : `<tr><td colspan="4" style="color:#94a3b8">No payment plan assigned to this unit.</td></tr>`}
+        ${s.schedule.length ? s.schedule.map((m) => `<tr${m.kind === 'dld' ? ' style="color:#0369a1"' : ''}><td>${esc(m.label)}</td><td>${m.date ? esc(m.date) : '—'}</td><td>${esc(m.when)}</td><td class="num">${m.percent != null ? m.percent + '%' : '—'}</td><td class="num">${aed(m.amount)}</td></tr>`).join('')
+          : `<tr><td colspan="5" style="color:#94a3b8">No payment plan assigned to this unit.</td></tr>`}
       </tbody>
-      <tfoot><tr><td colspan="3">Total</td><td class="num">${aed(s.net)}</td></tr></tfoot>
+      <tfoot><tr><td colspan="4">Total payable</td><td class="num">${aed(s.scheduleTotal)}</td></tr></tfoot>
     </table>
+    ${s.handoverDate ? `<p style="font-size:11px;color:#94a3b8;margin-top:6px">Schedule anchored to booking ${new Date(s.bookingDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} and handover ${new Date(s.handoverDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}.</p>` : ''}
 
     <h2>Fees &amp; charges</h2>
     <table class="data">
       <thead><tr><th>Fee</th><th>Basis</th><th>Paid by</th><th class="num">Amount</th></tr></thead>
       <tbody>
-        ${s.fees.map((f) => `<tr><td>${esc(f.label)}</td><td>${esc(f.detail)}</td><td>${f.payer[0] + f.payer.slice(1).toLowerCase()}</td><td class="num">${aed(f.amount)}</td></tr>`).join('')}
+        ${s.fees.map((f) => `<tr${f.waived ? ' style="color:#94a3b8"' : ''}><td>${esc(f.label)}</td><td>${esc(f.detail)}</td><td>${f.payer[0] + f.payer.slice(1).toLowerCase()}</td><td class="num">${f.waived ? 'Waived' : aed(f.amount)}</td></tr>`).join('')}
       </tbody>
       <tfoot>
         <tr><td colspan="3">Buyer fees total</td><td class="num">${aed(s.feesTotalBuyer)}</td></tr>

@@ -39,6 +39,7 @@ const Create = z.object({
   unitId: z.string().min(1),
   brokerageId: z.string().nullable().optional(),
   discountAed: z.number().nonnegative().optional(),
+  dldWaiver: z.boolean().optional(),
   note: z.string().optional(),
   markSent: z.boolean().optional(),
   markReserved: z.boolean().optional(),
@@ -51,7 +52,7 @@ export function POST(req: Request) {
     const db = tenantDb(companyId);
     const body = Create.parse(await req.json());
 
-    const snapshot = await computeOffer(db, companyId, body.unitId, { discountAed: body.discountAed });
+    const snapshot = await computeOffer(db, companyId, body.unitId, { discountAed: body.discountAed, dldWaiver: body.dldWaiver });
     const status = body.markReserved ? 'RESERVED' : body.markSent ? 'SENT' : 'DRAFT';
     const now = new Date();
 

@@ -114,15 +114,25 @@ function SendModal({ offer, onClose, onSent }: { offer: Offer; onClose: () => vo
 }
 
 type Unit = { id: string; unitNumber: string; project: string | null; priceAed: number; status: string; layoutCode: string };
-type Snapshot = { net: number; price: number; discount: number; plan: { name: string | null }; schedule: { label: string; amount: number; percent: number | null }[]; feesTotalBuyer: number; grandTotal: number; layout: { imageDataUri: string | null } };
+type SchedRow = { label: string; when: string; date: string | null; percent: number | null; amount: number; kind: string };
+type Snapshot = {
+  net: number; price: number; discount: number; plan: { name: string | null };
+  schedule: SchedRow[]; scheduleTotal: number; feesTotalBuyer: number; grandTotal: number;
+  handoverDate: string | null; dld: { amount: number; waived: boolean } | null;
+  fit: { monthsToHandover: number | null; warning: string | null };
+  layout: { imageDataUri: string | null };
+};
+type Suggestion = { name: string; reason: string } | null;
 
 function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Unit[]>([]);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [discount, setDiscount] = useState('');
+  const [dldWaiver, setDldWaiver] = useState(false);
   const [note, setNote] = useState('');
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ id: string; publicToken: string } | null>(null);
   const [err, setErr] = useState('');
@@ -135,11 +145,14 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     return () => clearTimeout(t);
   }, [q]);
 
-  const preview = useCallback(async (u: Unit, d: string) => {
-    const sp = new URLSearchParams({ unitId: u.id }); if (Number(d) > 0) sp.set('discountAed', d);
-    const r = await api<{ snapshot: Snapshot }>(`/api/offers/prepare?${sp}`); setSnap(r.snapshot);
+  const preview = useCallback(async (u: Unit, d: string, waiver: boolean) => {
+    const sp = new URLSearchParams({ unitId: u.id });
+    if (Number(d) > 0) sp.set('discountAed', d);
+    if (waiver) sp.set('dldWaiver', 'true');
+    const r = await api<{ snapshot: Snapshot; suggestion: Suggestion }>(`/api/offers/prepare?${sp}`);
+    setSnap(r.snapshot); setSuggestion(r.suggestion);
   }, []);
-  useEffect(() => { if (unit) { const t = setTimeout(() => preview(unit, discount), 250); return () => clearTimeout(t); } }, [unit, discount, preview]);
+  useEffect(() => { if (unit) { const t = setTimeout(() => preview(unit, discount, dldWaiver), 250); return () => clearTimeout(t); } }, [unit, discount, dldWaiver, preview]);
 
   const save = async (mode: 'draft' | 'sent' | 'reserved') => {
     if (!unit) return;
@@ -147,7 +160,7 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     try {
       const r = await api<{ id: string; publicToken: string }>('/api/offers', {
         method: 'POST',
-        json: { unitId: unit.id, discountAed: Number(discount) || 0, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
+        json: { unitId: unit.id, discountAed: Number(discount) || 0, dldWaiver, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
       });
       setDone(r);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -194,7 +207,16 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               <button className="text-xs text-indigo-400 hover:text-indigo-300" onClick={() => { setUnit(null); setSnap(null); }}>Change</button>
             </div>
             <div className="mt-3"><label className="label">Discount (AED)</label><input className="field" type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" /></div>
+            <label className="flex items-center gap-2 mt-3 text-sm text-slate-300 cursor-pointer">
+              <input type="checkbox" checked={dldWaiver} onChange={e => setDldWaiver(e.target.checked)} className="accent-indigo-500" />
+              Waive DLD fee (developer absorbs)
+              <span className="text-[11px] text-slate-500">· otherwise it&apos;s due with the down payment</span>
+            </label>
             <div className="mt-3"><label className="label">Note (optional)</label><textarea className="field" rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
+
+            {snap?.fit.warning && <p className="text-xs text-amber-400 mt-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">⚠ {snap.fit.warning}</p>}
+            {suggestion && <p className="text-xs text-indigo-300 mt-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-3 py-2">💡 Suggested plan: <b>{suggestion.name}</b> — {suggestion.reason}</p>}
+
             {err && <p className="text-sm text-red-400 mt-3">{err}</p>}
             <div className="flex flex-wrap gap-2 mt-4">
               <button className="btn-primary" disabled={busy} onClick={() => save('sent')}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Create &amp; send</button>
@@ -214,9 +236,23 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                 <div className="flex justify-between text-sm"><span className="text-slate-400">List price</span><span className="text-slate-200">{money(snap.price)}</span></div>
                 {snap.discount > 0 && <div className="flex justify-between text-sm"><span className="text-slate-400">Discount</span><span className="text-red-300">- {money(snap.discount)}</span></div>}
                 <div className="flex justify-between text-base font-bold mt-1"><span className="text-white">Purchase price</span><span className="text-indigo-300">{money(snap.net)}</span></div>
-                <p className="text-[11px] text-slate-500 mt-2">{snap.plan.name || 'No payment plan'} · {snap.schedule.length} milestone(s)</p>
-                <div className="border-t border-slate-800 mt-3 pt-2 flex justify-between text-sm"><span className="text-slate-400">+ buyer fees</span><span className="text-slate-300">{money(snap.feesTotalBuyer)}</span></div>
-                <div className="flex justify-between text-sm font-semibold"><span className="text-white">Total</span><span className="text-white">{money(snap.grandTotal)}</span></div>
+
+                <p className="text-[11px] text-slate-500 mt-3 mb-1">{snap.plan.name || 'No payment plan'}{snap.handoverDate ? ` · handover ${new Date(snap.handoverDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : ' · no handover date set'}</p>
+                <div className="border border-slate-800 rounded-lg divide-y divide-slate-800/70 max-h-52 overflow-auto">
+                  {snap.schedule.map((m, i) => (
+                    <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 text-xs ${m.kind === 'dld' ? 'text-sky-300' : 'text-slate-300'}`}>
+                      <span className="truncate">{m.label}</span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className="text-slate-500">{m.date || m.when}</span>
+                        {m.percent != null && <span className="text-slate-500 w-8 text-right">{m.percent}%</span>}
+                        <span className="w-24 text-right">{money(m.amount)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-slate-800 mt-3 pt-2 flex justify-between text-sm"><span className="text-slate-400">+ buyer fees{snap.dld?.waived ? ' (DLD waived)' : ''}</span><span className="text-slate-300">{money(snap.feesTotalBuyer)}</span></div>
+                <div className="flex justify-between text-sm font-semibold"><span className="text-white">Total all-in</span><span className="text-white">{money(snap.grandTotal)}</span></div>
               </>
             )}
           </div>

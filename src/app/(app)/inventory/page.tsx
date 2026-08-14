@@ -6,7 +6,7 @@ import {
   Boxes, Download, Upload, Loader2, Search, AlertTriangle, CheckCircle2, FolderPlus,
 } from 'lucide-react';
 
-type Project = { id: string; name: string; location: string | null; _count: { units: number } };
+type Project = { id: string; name: string; location: string | null; handoverDate: string | null; _count: { units: number } };
 type Unit = {
   id: string; unitNumber: string; layoutCode: string; floor: number | null; sizeSqft: number | null;
   view: string | null; priceAed: number; handover: string | null; status: string; project: string | null; paymentPlan: string | null;
@@ -58,6 +58,13 @@ export default function InventoryPage() {
   useEffect(() => { api<{ user: { role: string } }>('/api/me').then(r => setMe(r.user)); loadProjects(); }, [loadProjects]);
   useEffect(() => { const t = setTimeout(loadUnits, 200); return () => clearTimeout(t); }, [loadUnits]);
 
+  const selProject = projects.find(p => p.id === projectId);
+  const setHandover = async (v: string) => {
+    if (!projectId) return;
+    await api(`/api/inventory/projects/${projectId}`, { method: 'PATCH', json: { handoverDate: v || null } });
+    loadProjects();
+  };
+
   const createProject = async (e: React.FormEvent) => {
     e.preventDefault(); setCreating(true); setErr('');
     try {
@@ -100,6 +107,13 @@ export default function InventoryPage() {
             {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p._count.units})</option>)}
           </select>
         </div>
+
+        {isAdmin && projectId && (
+          <div>
+            <label className="label">Handover date {!selProject?.handoverDate && <span className="text-amber-400">· set for dated plans</span>}</label>
+            <input type="date" className="field" value={selProject?.handoverDate ? selProject.handoverDate.slice(0, 10) : ''} onChange={e => setHandover(e.target.value)} />
+          </div>
+        )}
 
         {isAdmin && (
           <form onSubmit={createProject} className="flex items-end gap-2">
