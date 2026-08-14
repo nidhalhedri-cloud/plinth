@@ -37,3 +37,6 @@ next-env.d.ts
 
 # local env
 .env
+
+# local embedded postgres data
+.pgdata/
