@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/client';
-import { FileText, Plus, Search, Loader2, Download, Link2, Check, X, Eye } from 'lucide-react';
+import { FileText, Plus, Search, Loader2, Download, Link2, Check, X, Eye, MessageSquare } from 'lucide-react';
 
 const money = (n: number) => 'AED ' + Math.round(n).toLocaleString('en-AE');
 const STATUS: Record<string, string> = {
@@ -16,6 +16,7 @@ type Offer = { id: string; publicToken: string; status: string; price: number; d
 export default function OffersPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [building, setBuilding] = useState(false);
+  const [sendFor, setSendFor] = useState<Offer | null>(null);
   const load = useCallback(() => api<{ offers: Offer[] }>('/api/offers').then(r => setOffers(r.offers)), []);
   useEffect(() => { load(); }, [load]);
 
@@ -35,6 +36,7 @@ export default function OffersPage() {
       </div>
 
       {building && <OfferBuilder onClose={() => setBuilding(false)} onSaved={() => { setBuilding(false); load(); }} />}
+      {sendFor && <SendModal offer={sendFor} onClose={() => setSendFor(null)} onSent={() => { setSendFor(null); load(); }} />}
 
       <div className="card mt-6 overflow-hidden">
         <div className="overflow-x-auto">
@@ -58,6 +60,7 @@ export default function OffersPage() {
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1 justify-end">
+                      <button title="Send to WhatsApp group" onClick={() => setSendFor(o)} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800"><MessageSquare className="w-4 h-4" /></button>
                       <a href={`/api/offers/${o.id}/pdf`} target="_blank" title="Open PDF" className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Download className="w-4 h-4" /></a>
                       <button title="Copy public link" onClick={() => navigator.clipboard.writeText(`${location.origin}/offer/${o.publicToken}`)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Link2 className="w-4 h-4" /></button>
                     </div>
@@ -66,6 +69,44 @@ export default function OffersPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SendModal({ offer, onClose, onSent }: { offer: Offer; onClose: () => void; onSent: () => void }) {
+  const [brokerages, setBrokerages] = useState<{ id: string; name: string; links: { mine: boolean; groupName: string | null }[] }[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => { api<{ brokerages: typeof brokerages }>('/api/brokerages').then(r => setBrokerages(r.brokerages)); }, []);
+
+  const send = async (brokerageId: string) => {
+    setBusy(brokerageId); setErr('');
+    try { await api(`/api/offers/${offer.id}/send`, { method: 'POST', json: { brokerageId } }); onSent(); }
+    catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="card p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><h3 className="font-semibold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4 text-emerald-400" /> Send offer to a broker</h3><button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button></div>
+        <p className="text-xs text-slate-500 mb-4">Unit {offer.unit} · sends the PDF into the brokerage&apos;s linked WhatsApp group.</p>
+        {err && <p className="text-sm text-red-400 mb-3">{err}</p>}
+        <div className="space-y-2 max-h-72 overflow-auto">
+          {!brokerages.length && <p className="text-slate-500 text-sm">No brokerages yet — add one in Brokerages.</p>}
+          {brokerages.map(b => {
+            const link = b.links.find(l => l.mine);
+            const ready = !!link?.groupName;
+            return (
+              <div key={b.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/50">
+                <div><p className="text-sm text-white">{b.name}</p><p className="text-[11px] text-slate-500">{ready ? link!.groupName : 'No group linked'}</p></div>
+                <button disabled={!ready || busy === b.id} onClick={() => send(b.id)} className="btn-primary !py-1.5 text-xs disabled:opacity-40">
+                  {busy === b.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send'}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
