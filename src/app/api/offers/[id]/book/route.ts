@@ -2,6 +2,7 @@ import { tenantDb } from '@/lib/db';
 import { requireRole, HttpError } from '@/lib/auth';
 import { route } from '@/lib/http';
 import { computeOffer, type OfferSnapshot } from '@/lib/offer';
+import { generatePayments } from '@/lib/payments';
 import type { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
@@ -59,6 +60,9 @@ export function POST(req: Request, { params }: { params: { id: string } }) {
       },
     });
     await db.unit.updateMany({ where: { id: offer.unitId }, data: { status: 'RESERVED' } });
+
+    // Materialise the Statement of Account (dated installments) from the frozen booking schedule.
+    await generatePayments(db, companyId, offer.id, offer.unitId, bookingSnapshot);
 
     return { ok: true };
   });

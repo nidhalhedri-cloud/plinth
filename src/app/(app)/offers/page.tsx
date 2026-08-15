@@ -71,6 +71,7 @@ export default function OffersPage() {
                         <>
                           <a href={`/api/offers/${o.id}/doc/booking`} target="_blank" title="Booking form PDF" className="px-2 py-1 rounded-lg text-[11px] text-amber-300 hover:bg-slate-800">Booking</a>
                           <a href={`/api/offers/${o.id}/doc/spa`} target="_blank" title="SPA PDF" className="px-2 py-1 rounded-lg text-[11px] text-purple-300 hover:bg-slate-800">SPA</a>
+                          <a href={`/collections/${o.id}`} title="Statement of Account" className="px-2 py-1 rounded-lg text-[11px] text-indigo-300 hover:bg-slate-800">SOA</a>
                         </>
                       ) : (
                         <button title="Book this unit (buyer details + payment proof)" onClick={() => setBookFor(o)} className="px-2 py-1 rounded-lg text-[11px] bg-indigo-600/80 hover:bg-indigo-500 text-white">Book</button>

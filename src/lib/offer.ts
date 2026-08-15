@@ -1,7 +1,7 @@
 import { prisma, type TenantClient } from './db';
 import { HttpError } from './auth';
 
-export type ScheduleRow = { label: string; when: string; date: string | null; percent: number | null; amount: number; kind: 'price' | 'dld' };
+export type ScheduleRow = { label: string; when: string; date: string | null; dateISO: string | null; percent: number | null; amount: number; kind: 'price' | 'dld' };
 
 export type OfferSnapshot = {
   generatedAt: string;
@@ -82,7 +82,8 @@ function schedulePrice(milestones: Milestone[], net: number, booking: Date, hand
           // Spread into monthly installments after handover — one dated row each is too long for a
           // page, so summarise: first installment date + count + per-installment amount.
           const per = Math.round(base.amount / months);
-          rows.push({ ...base, when: `${months} monthly installments of ${per.toLocaleString('en-AE')}`, date: fmt(addMonths(handover, 1)) + ` →`, });
+          const first = addMonths(handover, 1);
+          rows.push({ ...base, when: `${months} monthly installments of ${per.toLocaleString('en-AE')}`, date: fmt(first) + ` →`, dateISO: first.toISOString() });
           continue;
         }
         date = addMonths(handover, 1);
@@ -91,7 +92,7 @@ function schedulePrice(milestones: Milestone[], net: number, booking: Date, hand
       case 'FIXED_DATE': { const d = new Date(m.triggerValue || ''); date = isNaN(d.getTime()) ? null : d; break; }
       default: date = booking;
     }
-    rows.push({ ...base, when: `${WHEN[m.trigger] || m.trigger}${m.triggerValue && m.trigger !== 'POST_HANDOVER' ? ` · ${m.triggerValue}` : ''}`, date: date ? fmt(date) : null });
+    rows.push({ ...base, when: `${WHEN[m.trigger] || m.trigger}${m.triggerValue && m.trigger !== 'POST_HANDOVER' ? ` · ${m.triggerValue}` : ''}`, date: date ? fmt(date) : null, dateISO: date ? date.toISOString() : null });
   }
   return { rows, squeezed };
 }
@@ -152,7 +153,7 @@ export async function computeOffer(
 
   const schedule: ScheduleRow[] = [...priceRows];
   if (dld && !dld.waived) {
-    schedule.push({ label: `${fees.find((f) => isDld(f.label))?.label || 'DLD registration'} (4%)`, when: 'With down payment', date: fmt(booking), percent: null, amount: dld.amount, kind: 'dld' });
+    schedule.push({ label: `${fees.find((f) => isDld(f.label))?.label || 'DLD registration'} (4%)`, when: 'With down payment', date: fmt(booking), dateISO: booking.toISOString(), percent: null, amount: dld.amount, kind: 'dld' });
   }
   const scheduleTotal = schedule.reduce((s, r) => s + r.amount, 0);
 

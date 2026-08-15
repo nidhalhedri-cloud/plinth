@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/client';
 import type { Role } from '@prisma/client';
 import {
-  LayoutDashboard, Building2, Boxes, Layers, Wallet, Receipt, FileText, Users, LogOut, Settings,
+  LayoutDashboard, Building2, Boxes, Layers, Wallet, Receipt, FileText, Users, LogOut, Settings, Coins,
 } from 'lucide-react';
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; soon?: boolean };
@@ -18,6 +18,7 @@ const NAV: Item[] = [
   { href: '/fees', label: 'Fees', icon: Receipt, adminOnly: true },
   { href: '/brokerages', label: 'Brokerages', icon: Building2 },
   { href: '/offers', label: 'Offers', icon: FileText },
+  { href: '/collections', label: 'Collections', icon: Coins, adminOnly: true },
   { href: '/team', label: 'Team', icon: Users, adminOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings, adminOnly: true },
 ];

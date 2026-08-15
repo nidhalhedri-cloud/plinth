@@ -46,6 +46,8 @@ model Company {
   offers       Offer[]
   waSendLogs   WhatsappSendLog[]
   assets       Asset[]
+  payments     Payment[]
+  eois         Eoi[]
 }
 
 // Binary storage in Postgres — layout floor plans, company logos, generated offer PDFs. Keeps the
@@ -114,6 +116,9 @@ model Brokerage {
   reraNumber    String?
   contactPerson String?
   phone         String?
+  // Default commission the developer pays this agency, and whether the RERA agency agreement is registered.
+  commissionRate      Decimal? @db.Decimal(6, 3)
+  agreementRegistered Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -152,12 +157,16 @@ model Project {
   // The anchor date for payment scheduling: from the offer/booking date up to handover, milestones
   // get real calendar dates (and are auto-compressed if the window is short).
   handoverDate    DateTime?
+  // RERA project escrow account — every buyer installment must be paid into it (Law No. 8 of 2007).
+  escrowBank      String?
+  escrowAccountNo String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   layouts Layout[]
   units   Unit[]
+  eois    Eoi[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -332,6 +341,16 @@ model Offer {
   paymentProofAssetId String? // uploaded proof of the booking payment
   // Schedule recomputed at booking from bookingStartDate, frozen onto the booking/SPA documents.
   bookingSnapshot     Json?
+  // Broker commission on this deal (developer pays the broker). Rate overrides the brokerage default.
+  commissionRate   Decimal? @db.Decimal(6, 3)
+  commissionStatus String   @default("accrued") // accrued | invoiced | paid
+  // DLD/Oqood registration of the SPA (must be registered within the DLD deadline after signing).
+  oqoodStatus String    @default("pending") // pending | registered | title_deed
+  oqoodRef    String?
+  oqoodDate   DateTime?
+  // Handover lifecycle: completion notice → snagging → final payment/NOC → title deed.
+  handoverStatus String  @default("not_started") // not_started | completion_notice | snagging | noc | title_deed
+  titleDeedRef   String?
   pdfUrl       String?
   viewCount    Int         @default(0)
   firstViewedAt DateTime?
@@ -345,6 +364,7 @@ model Offer {
   brokerage Brokerage? @relation(fields: [brokerageId], references: [id], onDelete: SetNull)
   rm        User       @relation(fields: [rmUserId], references: [id], onDelete: Cascade)
   sendLogs  WhatsappSendLog[]
+  payments  Payment[]
 
   @@index([companyId])
   @@index([companyId, status])
@@ -385,4 +405,78 @@ model WhatsappSendLog {
 
   @@index([companyId])
   @@index([rmUserId])
+}
+
+// ─────────────────────────── payment collections (Statement of Account) ───────────────────────────
+
+enum PaymentStatus {
+  DUE
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+// One dated installment/charge for a booked deal. Generated from the booking schedule; receipts are
+// recorded against it. The set of Payments for an offer IS the Statement of Account (SOA). Every
+// buyer installment is expected to be paid into the project escrow account (toEscrow).
+model Payment {
+  id         String        @id @default(cuid())
+  companyId  String
+  offerId    String
+  unitId     String
+  order      Int
+  label      String
+  kind       String        @default("installment") // installment | dld | fee
+  dueDate    DateTime?
+  percent    Decimal?      @db.Decimal(6, 3)
+  amount     Decimal       @db.Decimal(14, 2)
+  paidAmount Decimal       @db.Decimal(14, 2) @default(0)
+  paidAt     DateTime?
+  method     String? // bank transfer | cheque | card | cash
+  reference  String?
+  toEscrow   Boolean       @default(true)
+  status     PaymentStatus @default(DUE)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  offer   Offer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([offerId])
+  @@index([companyId, status])
+}
+
+// ─────────────────────────── EOI / launch allocation (pre-booking) ───────────────────────────
+
+enum EoiStatus {
+  SUBMITTED
+  ALLOCATED
+  CONVERTED
+  REFUNDED
+  CANCELLED
+}
+
+// An Expression of Interest — a refundable token deposit a buyer places to get priority in a launch
+// allocation, before a specific unit is booked.
+model Eoi {
+  id           String    @id @default(cuid())
+  companyId    String
+  projectId    String?
+  clientName   String
+  clientEmail  String?
+  clientPhone  String?
+  clientIdNumber String?
+  tokenAmount  Decimal   @db.Decimal(14, 2) @default(0)
+  refundable   Boolean   @default(true)
+  priority     Int       @default(0)
+  status       EoiStatus @default(SUBMITTED)
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
 }
