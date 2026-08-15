@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client';
 import { Settings, Upload, Check, Loader2 } from 'lucide-react';
 
-type Company = { name: string; logoUrl: string | null; brandColor: string; primaryContactName: string | null; primaryContactEmail: string | null };
+type Company = { name: string; logoUrl: string | null; brandColor: string; primaryContactName: string | null; primaryContactEmail: string | null; bookingTerms: string | null; spaTerms: string | null };
 
 export default function SettingsPage() {
   const [c, setC] = useState<Company | null>(null);
@@ -20,7 +20,7 @@ export default function SettingsPage() {
     if (!c) return;
     setBusy(true); setErr('');
     try {
-      await api('/api/company', { method: 'PATCH', json: { name: c.name, brandColor: c.brandColor, primaryContactName: c.primaryContactName || '', primaryContactEmail: c.primaryContactEmail || '' } });
+      await api('/api/company', { method: 'PATCH', json: { name: c.name, brandColor: c.brandColor, primaryContactName: c.primaryContactName || '', primaryContactEmail: c.primaryContactEmail || '', bookingTerms: c.bookingTerms || '', spaTerms: c.spaTerms || '' } });
       setSaved(true); setTimeout(() => setSaved(false), 1500);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -70,6 +70,15 @@ export default function SettingsPage() {
         <div className="grid sm:grid-cols-2 gap-3">
           <div><label className="label">Primary contact</label><input className="field" value={c.primaryContactName || ''} onChange={e => setC({ ...c, primaryContactName: e.target.value })} /></div>
           <div><label className="label">Contact email</label><input className="field" value={c.primaryContactEmail || ''} onChange={e => setC({ ...c, primaryContactEmail: e.target.value })} /></div>
+        </div>
+
+        <div>
+          <label className="label">Booking form — terms &amp; conditions</label>
+          <textarea className="field" rows={4} value={c.bookingTerms || ''} onChange={e => setC({ ...c, bookingTerms: e.target.value })} placeholder="Shown on every generated Booking Form." />
+        </div>
+        <div>
+          <label className="label">SPA — terms &amp; conditions</label>
+          <textarea className="field" rows={4} value={c.spaTerms || ''} onChange={e => setC({ ...c, spaTerms: e.target.value })} placeholder="Shown on every generated SPA document." />
         </div>
 
         {err && <p className="text-sm text-red-400">{err}</p>}

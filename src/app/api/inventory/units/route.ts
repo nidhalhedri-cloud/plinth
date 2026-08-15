@@ -18,8 +18,10 @@ export function GET(req: Request) {
 
     const where: Prisma.UnitWhereInput = {};
     if (projectId) where.projectId = projectId;
-    if (status) where.status = status as Prisma.UnitWhereInput['status'];
     if (q) where.unitNumber = { contains: q, mode: 'insensitive' };
+    // RMs only ever see AVAILABLE units — reserved / booked / sold are for admins only.
+    if (u.role === 'RM') where.status = 'AVAILABLE';
+    else if (status) where.status = status as Prisma.UnitWhereInput['status'];
 
     const [items, total] = await Promise.all([
       db.unit.findMany({

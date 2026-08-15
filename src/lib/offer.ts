@@ -100,13 +100,20 @@ export async function computeOffer(
   db: TenantClient,
   companyId: string,
   unitId: string,
-  opts?: { discountAed?: number; dldWaiver?: boolean; bookingDate?: Date; handoverDate?: Date | null },
+  opts?: { discountAed?: number; dldWaiver?: boolean; bookingDate?: Date; handoverDate?: Date | null; planId?: string },
 ): Promise<OfferSnapshot> {
   const unit = await db.unit.findFirst({
     where: { id: unitId },
     include: { project: true, paymentPlan: { include: { milestones: { orderBy: { order: 'asc' } } } } },
   });
   if (!unit) throw new HttpError(404, 'Unit not found');
+
+  // The agent may pick a plan for the offer, overriding the unit's default assignment.
+  let chosenPlan = unit.paymentPlan;
+  if (opts?.planId) {
+    const p = await db.paymentPlan.findFirst({ where: { id: opts.planId }, include: { milestones: { orderBy: { order: 'asc' } } } });
+    if (p) chosenPlan = p;
+  }
 
   const [layout, fees, company] = await Promise.all([
     db.layout.findFirst({ where: { projectId: unit.projectId, code: unit.layoutCode } }),
@@ -121,7 +128,7 @@ export async function computeOffer(
   const booking = opts?.bookingDate || new Date();
   const handover = opts?.handoverDate !== undefined ? opts.handoverDate : (unit.project.handoverDate ? new Date(unit.project.handoverDate) : null);
 
-  const milestones = (unit.paymentPlan?.milestones || []).map((m) => ({
+  const milestones = (chosenPlan?.milestones || []).map((m) => ({
     label: m.label, percent: m.percent === null ? null : Number(m.percent), fixedAmount: m.fixedAmount === null ? null : Number(m.fixedAmount), trigger: m.trigger, triggerValue: m.triggerValue,
   }));
   const { rows: priceRows, squeezed } = schedulePrice(milestones, net, booking, handover);
@@ -171,7 +178,7 @@ export async function computeOffer(
     unit: { unitNumber: unit.unitNumber, layoutCode: unit.layoutCode, floor: unit.floor, sizeSqft: unit.sizeSqft, view: unit.view, handover: unit.handover },
     layout: { bedrooms: layout?.bedrooms ?? null, bathrooms: layout?.bathrooms ?? null, imageDataUri, imageVersion: layout?.imageVersion ?? null },
     price, discount, net,
-    plan: { name: unit.paymentPlan?.name ?? null },
+    plan: { name: chosenPlan?.name ?? null },
     schedule, scheduleTotal,
     dld,
     fees: feeLines,

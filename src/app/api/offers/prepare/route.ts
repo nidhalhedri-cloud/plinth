@@ -1,11 +1,11 @@
 import { tenantDb } from '@/lib/db';
 import { requireCompanyUser, HttpError } from '@/lib/auth';
 import { route } from '@/lib/http';
-import { computeOffer, suggestPlan } from '@/lib/offer';
+import { computeOffer } from '@/lib/offer';
 
 export const runtime = 'nodejs';
 
-// Live preview of an offer for a unit (not saved) — the RM reviews/edits before finalizing.
+// Live preview of an offer for a unit (not saved) — the agent reviews/edits before finalizing.
 export function GET(req: Request) {
   return route(async () => {
     const u = await requireCompanyUser();
@@ -15,13 +15,13 @@ export function GET(req: Request) {
 
     const discountAed = Number(sp.get('discountAed') || '0') || 0;
     const dldWaiver = sp.get('dldWaiver') === 'true';
-    let handoverDate: Date | undefined;
-    const hp = sp.get('handoverDate');
-    if (hp) { const d = new Date(hp); if (!isNaN(d.getTime())) handoverDate = d; }
+    const planId = sp.get('planId') || undefined;
+    let bookingDate: Date | undefined;
+    const bp = sp.get('bookingDate');
+    if (bp) { const d = new Date(bp); if (!isNaN(d.getTime())) bookingDate = d; }
 
     const db = tenantDb(u.companyId);
-    const snapshot = await computeOffer(db, u.companyId, unitId, { discountAed, dldWaiver, handoverDate });
-    const suggestion = await suggestPlan(db, snapshot.plan.name, snapshot.fit.monthsToHandover);
-    return { snapshot, suggestion };
+    const snapshot = await computeOffer(db, u.companyId, unitId, { discountAed, dldWaiver, planId, bookingDate });
+    return { snapshot };
   });
 }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { api } from '@/lib/client';
 import {
-  Boxes, Download, Upload, Loader2, Search, AlertTriangle, CheckCircle2, FolderPlus,
+  Boxes, Download, Upload, Loader2, Search, AlertTriangle, CheckCircle2, FolderPlus, Trash2,
 } from 'lucide-react';
 
 type Project = { id: string; name: string; location: string | null; handoverDate: string | null; _count: { units: number } };
@@ -64,6 +64,11 @@ export default function InventoryPage() {
     await api(`/api/inventory/projects/${projectId}`, { method: 'PATCH', json: { handoverDate: v || null } });
     loadProjects();
   };
+  const deleteProject = async () => {
+    if (!projectId || !confirm('Delete this project and all its units & layouts? This cannot be undone.')) return;
+    await api(`/api/inventory/projects/${projectId}`, { method: 'DELETE' });
+    setProjectId(''); loadProjects(); loadUnits();
+  };
 
   const createProject = async (e: React.FormEvent) => {
     e.preventDefault(); setCreating(true); setErr('');
@@ -113,6 +118,9 @@ export default function InventoryPage() {
             <label className="label">Handover date {!selProject?.handoverDate && <span className="text-amber-400">· set for dated plans</span>}</label>
             <input type="date" className="field" value={selProject?.handoverDate ? selProject.handoverDate.slice(0, 10) : ''} onChange={e => setHandover(e.target.value)} />
           </div>
+        )}
+        {isAdmin && projectId && (
+          <button onClick={deleteProject} title="Delete project" className="btn-ghost !px-2.5 hover:!bg-red-500/20 hover:!text-red-400"><Trash2 className="w-4 h-4" /></button>
         )}
 
         {isAdmin && (
@@ -164,12 +172,13 @@ export default function InventoryPage() {
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input className="field pl-9 w-56" placeholder="Search unit #" value={q} onChange={e => setQ(e.target.value)} />
         </div>
-        {['', 'AVAILABLE', 'RESERVED', 'SOLD', 'BLOCKED'].map(s => (
+        {isAdmin && ['', 'AVAILABLE', 'RESERVED', 'SOLD', 'BLOCKED'].map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium ${statusFilter === s ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
             {s === '' ? 'All' : s[0] + s.slice(1).toLowerCase()}
           </button>
         ))}
+        {!isAdmin && <span className="text-xs text-slate-500">Showing available units</span>}
         <span className="text-xs text-slate-500 ml-auto">{total} unit{total === 1 ? '' : 's'}</span>
       </div>
 

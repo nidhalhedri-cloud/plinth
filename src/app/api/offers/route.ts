@@ -29,6 +29,7 @@ export function GET() {
         unit: o.unit?.unitNumber, project: o.unit?.project?.name,
         brokerage: o.brokerage?.name || null,
         rm: `${o.rm.firstName} ${o.rm.lastName || ''}`.trim(),
+        booked: !!o.clientName, clientName: o.clientName,
         viewCount: o.viewCount, firstViewedAt: o.firstViewedAt, createdAt: o.createdAt,
       })),
     };
@@ -38,6 +39,7 @@ export function GET() {
 const Create = z.object({
   unitId: z.string().min(1),
   brokerageId: z.string().nullable().optional(),
+  planId: z.string().nullable().optional(),
   discountAed: z.number().nonnegative().optional(),
   dldWaiver: z.boolean().optional(),
   note: z.string().optional(),
@@ -52,7 +54,7 @@ export function POST(req: Request) {
     const db = tenantDb(companyId);
     const body = Create.parse(await req.json());
 
-    const snapshot = await computeOffer(db, companyId, body.unitId, { discountAed: body.discountAed, dldWaiver: body.dldWaiver });
+    const snapshot = await computeOffer(db, companyId, body.unitId, { discountAed: body.discountAed, dldWaiver: body.dldWaiver, planId: body.planId || undefined });
     const status = body.markReserved ? 'RESERVED' : body.markSent ? 'SENT' : 'DRAFT';
     const now = new Date();
 

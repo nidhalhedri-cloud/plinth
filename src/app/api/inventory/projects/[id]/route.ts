@@ -24,3 +24,13 @@ export function PATCH(req: Request, { params }: { params: { id: string } }) {
     return { ok: true };
   });
 }
+
+// Delete a project and everything under it (units, layouts) — admin only.
+export function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  return route(async () => {
+    const admin = await requireRole('COMPANY_ADMIN');
+    const db = tenantDb(admin.companyId!);
+    await db.project.deleteMany({ where: { id: params.id } });
+    return { ok: true };
+  });
+}

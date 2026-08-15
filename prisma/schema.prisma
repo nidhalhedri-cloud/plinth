@@ -28,6 +28,9 @@ model Company {
   brandColor          String?  @default("#2563eb")
   primaryContactName  String?
   primaryContactEmail String?
+  // Developer-authored terms shown on the generated Booking Form / SPA documents.
+  bookingTerms        String?  @db.Text
+  spaTerms            String?  @db.Text
   subscriptionStatus  String   @default("trialing")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -318,6 +321,17 @@ model Offer {
   // Full computed offer at finalize time (unit specs, layout image + version, schedule, fees) so a
   // later template/fee/layout change never mutates an already-sent offer.
   snapshot     Json?
+  // Buyer details captured at booking — needed on the Booking Form and SPA.
+  clientName     String?
+  clientEmail    String?
+  clientAddress  String?
+  clientIdType   String? // 'id' (Emirates ID) | 'passport'
+  clientIdNumber String?
+  // When the client starts paying — anchors the booking/SPA schedule (may differ from the offer date).
+  bookingStartDate    DateTime?
+  paymentProofAssetId String? // uploaded proof of the booking payment
+  // Schedule recomputed at booking from bookingStartDate, frozen onto the booking/SPA documents.
+  bookingSnapshot     Json?
   pdfUrl       String?
   viewCount    Int         @default(0)
   firstViewedAt DateTime?

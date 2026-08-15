@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/client';
-import { FileText, Plus, Search, Loader2, Download, Link2, Check, X, Eye, MessageSquare } from 'lucide-react';
+import { FileText, Plus, Search, Loader2, Download, Link2, Check, X, Eye, MessageSquare, Upload, BookMarked } from 'lucide-react';
 
 const money = (n: number) => 'AED ' + Math.round(n).toLocaleString('en-AE');
 const STATUS: Record<string, string> = {
@@ -11,14 +11,17 @@ const STATUS: Record<string, string> = {
 };
 const STATUSES = ['DRAFT', 'SENT', 'VIEWED', 'RESERVED', 'SPA_SIGNED', 'SOLD', 'DROPPED'];
 
-type Offer = { id: string; publicToken: string; status: string; price: number; discount: number; unit: string; project: string; brokerage: string | null; rm: string; viewCount: number; firstViewedAt: string | null; createdAt: string };
+type Offer = { id: string; publicToken: string; status: string; price: number; discount: number; unit: string; project: string; brokerage: string | null; rm: string; booked: boolean; clientName: string | null; viewCount: number; firstViewedAt: string | null; createdAt: string };
 
 export default function OffersPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [me, setMe] = useState<{ role: string } | null>(null);
   const [building, setBuilding] = useState(false);
   const [sendFor, setSendFor] = useState<Offer | null>(null);
+  const [bookFor, setBookFor] = useState<Offer | null>(null);
+  const isAdmin = me?.role === 'COMPANY_ADMIN' || me?.role === 'PLATFORM_ADMIN';
   const load = useCallback(() => api<{ offers: Offer[] }>('/api/offers').then(r => setOffers(r.offers)), []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); api<{ user: { role: string } }>('/api/me').then(r => setMe(r.user)); }, [load]);
 
   const setStatus = async (id: string, status: string) => {
     setOffers(os => os.map(o => o.id === id ? { ...o, status } : o));
@@ -37,6 +40,7 @@ export default function OffersPage() {
 
       {building && <OfferBuilder onClose={() => setBuilding(false)} onSaved={() => { setBuilding(false); load(); }} />}
       {sendFor && <SendModal offer={sendFor} onClose={() => setSendFor(null)} onSent={() => { setSendFor(null); load(); }} />}
+      {bookFor && <BookModal offer={bookFor} onClose={() => setBookFor(null)} onBooked={() => { setBookFor(null); load(); }} />}
 
       <div className="card mt-6 overflow-hidden">
         <div className="overflow-x-auto">
@@ -60,9 +64,17 @@ export default function OffersPage() {
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1 justify-end">
-                      <button title="Send to WhatsApp group" onClick={() => setSendFor(o)} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800"><MessageSquare className="w-4 h-4" /></button>
-                      <a href={`/api/offers/${o.id}/pdf`} target="_blank" title="Open PDF" className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Download className="w-4 h-4" /></a>
+                      <button title="Send offer to WhatsApp group" onClick={() => setSendFor(o)} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800"><MessageSquare className="w-4 h-4" /></button>
+                      <a href={`/api/offers/${o.id}/doc/offer`} target="_blank" title="Offer PDF" className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Download className="w-4 h-4" /></a>
                       <button title="Copy public link" onClick={() => navigator.clipboard.writeText(`${location.origin}/offer/${o.publicToken}`)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"><Link2 className="w-4 h-4" /></button>
+                      {isAdmin && (o.booked ? (
+                        <>
+                          <a href={`/api/offers/${o.id}/doc/booking`} target="_blank" title="Booking form PDF" className="px-2 py-1 rounded-lg text-[11px] text-amber-300 hover:bg-slate-800">Booking</a>
+                          <a href={`/api/offers/${o.id}/doc/spa`} target="_blank" title="SPA PDF" className="px-2 py-1 rounded-lg text-[11px] text-purple-300 hover:bg-slate-800">SPA</a>
+                        </>
+                      ) : (
+                        <button title="Book this unit (buyer details + payment proof)" onClick={() => setBookFor(o)} className="px-2 py-1 rounded-lg text-[11px] bg-indigo-600/80 hover:bg-indigo-500 text-white">Book</button>
+                      ))}
                     </div>
                   </td>
                 </tr>
@@ -113,6 +125,62 @@ function SendModal({ offer, onClose, onSent }: { offer: Offer; onClose: () => vo
   );
 }
 
+function BookModal({ offer, onClose, onBooked }: { offer: Offer; onClose: () => void; onBooked: () => void }) {
+  const [f, setF] = useState({ clientName: '', clientEmail: '', clientAddress: '', clientIdType: 'id', clientIdNumber: '', bookingStartDate: '' });
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF(s => ({ ...s, [k]: e.target.value }));
+
+  const submit = async () => {
+    if (!f.clientName.trim()) { setErr('Buyer name is required'); return; }
+    if (!f.clientIdNumber.trim()) { setErr('Emirates ID / passport number is required'); return; }
+    if (!f.bookingStartDate) { setErr('Choose when payments start'); return; }
+    if (!file) { setErr('Upload proof of the booking payment'); return; }
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData();
+      Object.entries(f).forEach(([k, v]) => fd.append(k, v));
+      fd.append('paymentProof', file);
+      await api(`/api/offers/${offer.id}/book`, { method: 'POST', body: fd });
+      onBooked();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="card p-5 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><h3 className="font-semibold text-white flex items-center gap-2"><BookMarked className="w-4 h-4 text-indigo-400" /> Book unit {offer.unit}</h3><button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button></div>
+        <p className="text-xs text-slate-500 mb-4">Buyer details + payment proof. This freezes the booking form and enables the SPA.</p>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2"><label className="label">Buyer name</label><input className="field" value={f.clientName} onChange={set('clientName')} /></div>
+          <div><label className="label">Email</label><input className="field" type="email" value={f.clientEmail} onChange={set('clientEmail')} /></div>
+          <div>
+            <label className="label">ID type</label>
+            <select className="field" value={f.clientIdType} onChange={set('clientIdType')}><option value="id">Emirates ID</option><option value="passport">Passport</option></select>
+          </div>
+          <div><label className="label">{f.clientIdType === 'passport' ? 'Passport no.' : 'Emirates ID'}</label><input className="field" value={f.clientIdNumber} onChange={set('clientIdNumber')} /></div>
+          <div><label className="label">Payments start</label><input className="field" type="date" value={f.bookingStartDate} onChange={set('bookingStartDate')} /></div>
+          <div className="sm:col-span-2"><label className="label">Address</label><input className="field" value={f.clientAddress} onChange={set('clientAddress')} /></div>
+          <div className="sm:col-span-2">
+            <label className="label">Payment proof</label>
+            <label className="btn-ghost cursor-pointer inline-flex"><Upload className="w-4 h-4" /> {file ? file.name : 'Upload receipt / screenshot'}
+              <input type="file" className="hidden" accept="image/*,.pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+        </div>
+
+        {err && <p className="text-sm text-red-400 mt-3">{err}</p>}
+        <div className="flex gap-2 mt-4">
+          <button className="btn-primary" onClick={submit} disabled={busy}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Confirm booking</button>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type Unit = { id: string; unitNumber: string; project: string | null; priceAed: number; status: string; layoutCode: string };
 type SchedRow = { label: string; when: string; date: string | null; percent: number | null; amount: number; kind: string };
 type Snapshot = {
@@ -122,21 +190,22 @@ type Snapshot = {
   fit: { monthsToHandover: number | null; warning: string | null };
   layout: { imageDataUri: string | null };
 };
-type Suggestion = { name: string; reason: string } | null;
 
 function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Unit[]>([]);
   const [unit, setUnit] = useState<Unit | null>(null);
+  const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
+  const [planId, setPlanId] = useState('');
   const [discount, setDiscount] = useState('');
   const [dldWaiver, setDldWaiver] = useState(false);
   const [note, setNote] = useState('');
   const [snap, setSnap] = useState<Snapshot | null>(null);
-  const [suggestion, setSuggestion] = useState<Suggestion>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ id: string; publicToken: string } | null>(null);
   const [err, setErr] = useState('');
 
+  useEffect(() => { api<{ plans: { id: string; name: string }[] }>('/api/plans').then(r => setPlans(r.plans)); }, []);
   useEffect(() => {
     const t = setTimeout(async () => {
       const sp = new URLSearchParams({ status: 'AVAILABLE' }); if (q.trim()) sp.set('q', q.trim());
@@ -145,14 +214,15 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     return () => clearTimeout(t);
   }, [q]);
 
-  const preview = useCallback(async (u: Unit, d: string, waiver: boolean) => {
+  const preview = useCallback(async (u: Unit, d: string, waiver: boolean, pid: string) => {
     const sp = new URLSearchParams({ unitId: u.id });
     if (Number(d) > 0) sp.set('discountAed', d);
     if (waiver) sp.set('dldWaiver', 'true');
-    const r = await api<{ snapshot: Snapshot; suggestion: Suggestion }>(`/api/offers/prepare?${sp}`);
-    setSnap(r.snapshot); setSuggestion(r.suggestion);
+    if (pid) sp.set('planId', pid);
+    const r = await api<{ snapshot: Snapshot }>(`/api/offers/prepare?${sp}`);
+    setSnap(r.snapshot);
   }, []);
-  useEffect(() => { if (unit) { const t = setTimeout(() => preview(unit, discount, dldWaiver), 250); return () => clearTimeout(t); } }, [unit, discount, dldWaiver, preview]);
+  useEffect(() => { if (unit) { const t = setTimeout(() => preview(unit, discount, dldWaiver, planId), 250); return () => clearTimeout(t); } }, [unit, discount, dldWaiver, planId, preview]);
 
   const save = async (mode: 'draft' | 'sent' | 'reserved') => {
     if (!unit) return;
@@ -160,7 +230,7 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     try {
       const r = await api<{ id: string; publicToken: string }>('/api/offers', {
         method: 'POST',
-        json: { unitId: unit.id, discountAed: Number(discount) || 0, dldWaiver, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
+        json: { unitId: unit.id, planId: planId || null, discountAed: Number(discount) || 0, dldWaiver, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
       });
       setDone(r);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -206,6 +276,13 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               <div><p className="text-white font-semibold">{unit.unitNumber}</p><p className="text-xs text-slate-500">{unit.layoutCode} · {unit.project}</p></div>
               <button className="text-xs text-indigo-400 hover:text-indigo-300" onClick={() => { setUnit(null); setSnap(null); }}>Change</button>
             </div>
+            <div className="mt-3">
+              <label className="label">Payment plan</label>
+              <select className="field" value={planId} onChange={e => setPlanId(e.target.value)}>
+                <option value="">Use the unit&apos;s assigned plan</option>
+                {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
             <div className="mt-3"><label className="label">Discount (AED)</label><input className="field" type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" /></div>
             <label className="flex items-center gap-2 mt-3 text-sm text-slate-300 cursor-pointer">
               <input type="checkbox" checked={dldWaiver} onChange={e => setDldWaiver(e.target.checked)} className="accent-indigo-500" />
@@ -215,7 +292,6 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
             <div className="mt-3"><label className="label">Note (optional)</label><textarea className="field" rows={2} value={note} onChange={e => setNote(e.target.value)} /></div>
 
             {snap?.fit.warning && <p className="text-xs text-amber-400 mt-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">⚠ {snap.fit.warning}</p>}
-            {suggestion && <p className="text-xs text-indigo-300 mt-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-3 py-2">💡 Suggested plan: <b>{suggestion.name}</b> — {suggestion.reason}</p>}
 
             {err && <p className="text-sm text-red-400 mt-3">{err}</p>}
             <div className="flex flex-wrap gap-2 mt-4">

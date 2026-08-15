@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '@/lib/client';
-import { Layers, Upload, Loader2, ImageIcon, Check } from 'lucide-react';
+import { Layers, Upload, Loader2, ImageIcon, Check, Trash2 } from 'lucide-react';
 
 type Project = { id: string; name: string; _count: { units: number } };
 type LayoutRow = {
@@ -122,7 +122,13 @@ function LayoutCard({ projectId, row, isAdmin, onSaved }: { projectId: string; r
       <div className="p-4">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-white">{row.code}</span>
-          <span className="text-xs text-slate-500">{row.unitCount} unit{row.unitCount === 1 ? '' : 's'}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">{row.unitCount} unit{row.unitCount === 1 ? '' : 's'}</span>
+            {isAdmin && row.id && (
+              <button title="Delete layout" onClick={async () => { if (confirm('Delete this layout & its floor plan?')) { await api(`/api/layouts/${row.id}`, { method: 'DELETE' }); onSaved(); } }}
+                className="p-1 rounded text-slate-500 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+            )}
+          </div>
         </div>
         {isAdmin ? (
           <div className="grid grid-cols-2 gap-2 mt-3">

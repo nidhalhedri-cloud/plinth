@@ -3,10 +3,22 @@ import type { OfferSnapshot } from './offer';
 const aed = (n: number) => 'AED ' + Math.round(n).toLocaleString('en-AE');
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
-// One branded HTML document used for BOTH the PDF (Puppeteer) and the public web link, so they are
-// always identical. Fully self-contained (inline CSS + inline images from the snapshot).
-export function offerHtml(s: OfferSnapshot, opts?: { offerId?: string; watermark?: string }): string {
+export type DocKind = 'OFFER' | 'BOOKING' | 'SPA';
+export type ClientInfo = { name: string | null; email: string | null; address: string | null; idType: string | null; idNumber: string | null };
+const KIND_TITLE: Record<DocKind, string> = { OFFER: 'Reservation Offer', BOOKING: 'Booking Form', SPA: 'Sale & Purchase Agreement' };
+
+// One branded HTML document used for the reservation OFFER, the BOOKING form, and the SPA (and for
+// both the PDF and the public web link), so they stay identical. Self-contained: inline CSS + inline
+// images. Booking/SPA add a buyer-details block, the developer's terms, and signature lines.
+export function offerHtml(
+  s: OfferSnapshot,
+  opts?: { offerId?: string; watermark?: string; kind?: DocKind; client?: ClientInfo | null; terms?: string | null; bookingStartDate?: string | null; paymentProof?: boolean },
+): string {
   const brand = s.company.brandColor || '#2563eb';
+  const kind = opts?.kind || 'OFFER';
+  const title = KIND_TITLE[kind];
+  const client = opts?.client || null;
+  const terms = (opts?.terms || '').trim();
   const specs: [string, string][] = [
     ['Unit', s.unit.unitNumber],
     ['Type', s.unit.layoutCode],
@@ -49,16 +61,29 @@ export function offerHtml(s: OfferSnapshot, opts?: { offerId?: string; watermark
   table.data tfoot td { font-weight: 700; border-top: 2px solid #e2e8f0; }
   .foot { padding: 20px 40px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 11px; line-height: 1.5; }
   .wm { position: fixed; top: 45%; left: 0; right: 0; text-align: center; font-size: 72px; color: rgba(15,23,42,.06); font-weight: 800; transform: rotate(-20deg); pointer-events: none; }
+  .client { margin-top: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
+  .client div { font-size: 12px; } .client b { color: #64748b; font-weight: 600; display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+  .terms { white-space: pre-wrap; font-size: 11px; color: #475569; line-height: 1.55; }
+  .sign { display: flex; gap: 40px; margin-top: 36px; }
+  .sign div { flex: 1; border-top: 1px solid #334155; padding-top: 6px; font-size: 11px; color: #64748b; }
 </style></head>
 <body>${opts?.watermark ? `<div class="wm">${esc(opts.watermark)}</div>` : ''}
 <div class="page">
   <div class="hdr">
-    <div><div class="co">${esc(s.company.name)}</div><h1>Reservation Offer</h1></div>
+    <div><div class="co">${esc(s.company.name)}</div><h1>${esc(title)}</h1></div>
     ${s.company.logoDataUri ? `<img src="${s.company.logoDataUri}" alt="">` : ''}
   </div>
   <div class="body">
     <div class="title">${esc(s.project.name)}${s.project.location ? ` <span style="font-weight:400;color:#64748b">· ${esc(s.project.location)}</span>` : ''}</div>
     <div class="sub">Unit ${esc(s.unit.unitNumber)} · ${esc(s.unit.layoutCode)}${s.plan.name ? ` · ${esc(s.plan.name)} payment plan` : ''}</div>
+${client ? `    <h2>Buyer details</h2>
+    <div class="client">
+      <div><b>Name</b>${esc(client.name || '—')}</div>
+      <div><b>${client.idType === 'passport' ? 'Passport no.' : 'Emirates ID'}</b>${esc(client.idNumber || '—')}</div>
+      <div><b>Email</b>${esc(client.email || '—')}</div>
+      <div><b>Address</b>${esc(client.address || '—')}</div>
+    </div>` : ''}
+${kind === 'BOOKING' && opts?.bookingStartDate ? `    <p style="font-size:12px;color:#334155;margin-top:12px">Payments commence <b>${new Date(opts.bookingStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>${opts?.paymentProof ? ' · Booking payment proof received.' : ''}</p>` : ''}
 
     <div class="grid">
       <div class="plan-img">
@@ -96,9 +121,19 @@ export function offerHtml(s: OfferSnapshot, opts?: { offerId?: string; watermark
         <tr><td colspan="3">Purchase price + buyer fees</td><td class="num" style="color:${brand}">${aed(s.grandTotal)}</td></tr>
       </tfoot>
     </table>
+${terms ? `    <h2>Terms &amp; conditions</h2>
+    <div class="terms">${esc(terms)}</div>` : ''}
+${kind !== 'OFFER' ? `    <div class="sign">
+      <div>Buyer signature &amp; date</div>
+      <div>For ${esc(s.company.name)} — authorised signatory &amp; date</div>
+    </div>` : ''}
   </div>
   <div class="foot">
-    This reservation offer is indicative and subject to availability and the developer's final approval and Sale &amp; Purchase Agreement.
+    ${kind === 'OFFER'
+      ? 'This reservation offer is indicative and subject to availability and the developer\'s final approval and Sale &amp; Purchase Agreement.'
+      : kind === 'BOOKING'
+      ? 'This booking form records the reservation of the above unit subject to the terms above and execution of the Sale &amp; Purchase Agreement.'
+      : 'This document summarises the agreed commercial terms; the executed Sale &amp; Purchase Agreement governs in full.'}
     Figures are estimates; DLD and administrative fees are set by the Dubai Land Department and may change. Generated ${new Date(s.generatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.
   </div>
 </div>

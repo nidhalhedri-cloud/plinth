@@ -10,7 +10,7 @@ export function GET() {
     const u = await requireCompanyUser();
     const company = await prisma.company.findUnique({
       where: { id: u.companyId },
-      select: { name: true, slug: true, logoUrl: true, brandColor: true, primaryContactName: true, primaryContactEmail: true },
+      select: { name: true, slug: true, logoUrl: true, brandColor: true, primaryContactName: true, primaryContactEmail: true, bookingTerms: true, spaTerms: true },
     });
     return { company };
   });
@@ -21,6 +21,8 @@ const Patch = z.object({
   brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour like #2563eb').optional(),
   primaryContactName: z.string().optional(),
   primaryContactEmail: z.string().email().optional().or(z.literal('')),
+  bookingTerms: z.string().optional(),
+  spaTerms: z.string().optional(),
 });
 
 export function PATCH(req: Request) {
