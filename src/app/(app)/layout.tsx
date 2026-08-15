@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/sidebar';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
   if (!user) redirect('/login');
+  if (user.role === 'BROKER') redirect('/broker'); // brokers use their own portal
 
   const company = user.companyId
     ? await prisma.company.findUnique({ where: { id: user.companyId }, select: { name: true } })

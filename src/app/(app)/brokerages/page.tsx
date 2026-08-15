@@ -14,7 +14,7 @@ export default function BrokeragesPage() {
   const [qr, setQr] = useState<string | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ name: '', reraNumber: '', contactPerson: '', phone: '' });
+  const [form, setForm] = useState({ name: '', reraNumber: '', contactPerson: '', phone: '', commissionRate: '' });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => api<{ brokerages: Brokerage[] }>('/api/brokerages').then(r => setBrokerages(r.brokerages)), []);
@@ -37,8 +37,14 @@ export default function BrokeragesPage() {
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api('/api/brokerages', { method: 'POST', json: form });
-    setForm({ name: '', reraNumber: '', contactPerson: '', phone: '' }); setAdding(false); load();
+    await api('/api/brokerages', { method: 'POST', json: { ...form, commissionRate: form.commissionRate ? Number(form.commissionRate) : null } });
+    setForm({ name: '', reraNumber: '', contactPerson: '', phone: '', commissionRate: '' }); setAdding(false); load();
+  };
+  const inviteBroker = async (brokerageId: string) => {
+    const email = window.prompt('Broker email to invite to the portal:');
+    if (!email) return;
+    try { const r = await api<{ acceptUrl: string }>(`/api/brokerages/${brokerageId}/users`, { method: 'POST', json: { email } }); window.prompt('Share this portal invite link with the broker:', r.acceptUrl); }
+    catch (e) { alert((e as Error).message); }
   };
   const linkGroup = async (brokerageId: string, groupJid: string) => {
     const g = groups.find(x => x.id === groupJid);
@@ -87,7 +93,8 @@ export default function BrokeragesPage() {
           <div className="sm:col-span-2"><label className="label">Name</label><input className="field" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
           <div><label className="label">RERA no.</label><input className="field" value={form.reraNumber} onChange={e => setForm(f => ({ ...f, reraNumber: e.target.value }))} /></div>
           <div><label className="label">Phone</label><input className="field" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-          <div className="sm:col-span-3"><label className="label">Contact person</label><input className="field" value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} /></div>
+          <div className="sm:col-span-2"><label className="label">Contact person</label><input className="field" value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} /></div>
+          <div><label className="label">Commission %</label><input className="field" type="number" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="4" /></div>
           <button className="btn-primary">Save</button>
         </form>
       )}
@@ -103,7 +110,10 @@ export default function BrokeragesPage() {
                   <p className="text-white font-semibold">{b.name}</p>
                   <p className="text-xs text-slate-500">{[b.reraNumber && `RERA ${b.reraNumber}`, b.contactPerson, b.phone].filter(Boolean).join(' · ') || 'No details'}</p>
                 </div>
-                {myLink?.groupName && <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 flex items-center gap-1"><Link2 className="w-3 h-3" />{myLink.groupName}</span>}
+                <div className="flex items-center gap-2">
+                  {myLink?.groupName && <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 flex items-center gap-1"><Link2 className="w-3 h-3" />{myLink.groupName}</span>}
+                  <button onClick={() => inviteBroker(b.id)} className="text-[11px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">Invite broker</button>
+                </div>
               </div>
               {waStatus === 'connected' && (
                 <div className="mt-3 flex items-center gap-2">

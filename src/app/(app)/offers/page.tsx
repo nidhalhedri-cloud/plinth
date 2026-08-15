@@ -198,6 +198,8 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [unit, setUnit] = useState<Unit | null>(null);
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
   const [planId, setPlanId] = useState('');
+  const [brokerages, setBrokerages] = useState<{ id: string; name: string }[]>([]);
+  const [brokerageId, setBrokerageId] = useState('');
   const [discount, setDiscount] = useState('');
   const [dldWaiver, setDldWaiver] = useState(false);
   const [note, setNote] = useState('');
@@ -206,7 +208,10 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [done, setDone] = useState<{ id: string; publicToken: string } | null>(null);
   const [err, setErr] = useState('');
 
-  useEffect(() => { api<{ plans: { id: string; name: string }[] }>('/api/plans').then(r => setPlans(r.plans)); }, []);
+  useEffect(() => {
+    api<{ plans: { id: string; name: string }[] }>('/api/plans').then(r => setPlans(r.plans));
+    api<{ brokerages: { id: string; name: string }[] }>('/api/brokerages').then(r => setBrokerages(r.brokerages)).catch(() => {});
+  }, []);
   useEffect(() => {
     const t = setTimeout(async () => {
       const sp = new URLSearchParams({ status: 'AVAILABLE' }); if (q.trim()) sp.set('q', q.trim());
@@ -231,7 +236,7 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     try {
       const r = await api<{ id: string; publicToken: string }>('/api/offers', {
         method: 'POST',
-        json: { unitId: unit.id, planId: planId || null, discountAed: Number(discount) || 0, dldWaiver, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
+        json: { unitId: unit.id, planId: planId || null, brokerageId: brokerageId || null, discountAed: Number(discount) || 0, dldWaiver, note, markSent: mode !== 'draft', markReserved: mode === 'reserved' },
       });
       setDone(r);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -282,6 +287,13 @@ function OfferBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               <select className="field" value={planId} onChange={e => setPlanId(e.target.value)}>
                 <option value="">Use the unit&apos;s assigned plan</option>
                 {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="mt-3">
+              <label className="label">Brokerage (for the broker portal &amp; commission)</label>
+              <select className="field" value={brokerageId} onChange={e => setBrokerageId(e.target.value)}>
+                <option value="">Direct — no broker</option>
+                {brokerages.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div className="mt-3"><label className="label">Discount (AED)</label><input className="field" type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" /></div>

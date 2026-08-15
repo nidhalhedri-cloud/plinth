@@ -3,6 +3,7 @@ import { tenantDb } from '@/lib/db';
 import { requireRole, HttpError } from '@/lib/auth';
 import { route } from '@/lib/http';
 import { statusFor } from '@/lib/payments';
+import { computeCommission } from '@/lib/commission';
 
 export const runtime = 'nodejs';
 
@@ -40,15 +41,18 @@ export function GET(_req: Request, { params }: { params: { id: string } }) {
     const overdue = rows.filter((r) => r.status === 'OVERDUE');
     const nextDue = rows.filter((r) => r.status !== 'PAID' && r.dueDate).sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())[0] || null;
 
-    const commRate = o.commissionRate != null ? Number(o.commissionRate) : (o.brokerage?.commissionRate != null ? Number(o.brokerage.commissionRate) : null);
-    const commAmount = commRate != null ? Math.round((Number(o.priceAed) * commRate) / 100) : null;
+    const comm = await computeCommission(db, admin.companyId!, params.id);
 
     return {
       offer: { id: o.id, unit: o.unit?.unitNumber, project: o.unit?.project?.name, client: o.clientName, clientId: o.clientIdNumber, price: Number(o.priceAed), status: o.status },
       escrow: { bank: o.unit?.project?.escrowBank || null, accountNo: o.unit?.project?.escrowAccountNo || null },
       payments: rows,
       totals: { contracted, collected, outstanding: contracted - collected, overdueCount: overdue.length, overdueAmount: overdue.reduce((s, r) => s + r.outstanding, 0), nextDue },
-      commission: { rate: commRate, amount: commAmount, status: o.commissionStatus, brokerage: o.brokerage?.name || null },
+      commission: {
+        rate: comm?.broker.rate ?? null, amount: comm?.broker.amount ?? null, status: comm?.broker.status ?? o.commissionStatus, brokerage: o.brokerage?.name || null,
+        qualified: comm?.qualified ?? false, paidPercent: comm?.paidPercent ?? 0, threshold: comm?.threshold ?? null,
+        rmRate: comm?.rm.rate ?? null, rmAmount: comm?.rm.amount ?? null,
+      },
       deal: { oqoodStatus: o.oqoodStatus, oqoodRef: o.oqoodRef, oqoodDate: o.oqoodDate, handoverStatus: o.handoverStatus, titleDeedRef: o.titleDeedRef },
     };
   });

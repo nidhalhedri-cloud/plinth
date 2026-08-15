@@ -14,6 +14,7 @@ export type SessionUser = {
   firstName: string;
   role: Role;
   companyId: string | null;
+  brokerageId: string | null;
 };
 
 export function hashPassword(pw: string) { return bcrypt.hash(pw, 12); }
@@ -55,10 +56,10 @@ export async function currentUser(): Promise<SessionUser | null> {
   }
   const u = await prisma.user.findUnique({
     where: { id: uid },
-    select: { id: true, email: true, firstName: true, role: true, companyId: true, isActive: true },
+    select: { id: true, email: true, firstName: true, role: true, companyId: true, brokerageId: true, isActive: true },
   });
   if (!u || !u.isActive) return null;
-  return { id: u.id, email: u.email, firstName: u.firstName, role: u.role, companyId: u.companyId };
+  return { id: u.id, email: u.email, firstName: u.firstName, role: u.role, companyId: u.companyId, brokerageId: u.brokerageId };
 }
 
 /** Throwing guards for route handlers. */
@@ -83,4 +84,11 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
   const u = await requireUser();
   if (!roles.includes(u.role)) throw new HttpError(403, 'Insufficient permissions');
   return u;
+}
+
+// A broker-portal user (external agency), scoped to their brokerage + the developer company.
+export async function requireBroker(): Promise<SessionUser & { brokerageId: string; companyId: string }> {
+  const u = await requireUser();
+  if (u.role !== 'BROKER' || !u.brokerageId || !u.companyId) throw new HttpError(403, 'Broker access only');
+  return u as SessionUser & { brokerageId: string; companyId: string };
 }

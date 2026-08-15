@@ -10,7 +10,7 @@ export function GET() {
     const u = await requireCompanyUser();
     const company = await prisma.company.findUnique({
       where: { id: u.companyId },
-      select: { name: true, slug: true, logoUrl: true, brandColor: true, primaryContactName: true, primaryContactEmail: true, bookingTerms: true, spaTerms: true, smtpHost: true, smtpPort: true, smtpUser: true, fromEmail: true, fromName: true, remindersEnabled: true, reminderDaysBefore: true },
+      select: { name: true, slug: true, logoUrl: true, brandColor: true, primaryContactName: true, primaryContactEmail: true, bookingTerms: true, spaTerms: true, smtpHost: true, smtpPort: true, smtpUser: true, fromEmail: true, fromName: true, remindersEnabled: true, reminderDaysBefore: true, defaultBrokerCommission: true, defaultRmCommission: true, brokerReleaseThreshold: true },
     });
     return { company };
   });
@@ -31,6 +31,9 @@ const Patch = z.object({
   fromName: z.string().optional(),
   remindersEnabled: z.boolean().optional(),
   reminderDaysBefore: z.number().int().min(0).max(60).optional(),
+  defaultBrokerCommission: z.number().nonnegative().nullable().optional(),
+  defaultRmCommission: z.number().nonnegative().nullable().optional(),
+  brokerReleaseThreshold: z.number().min(0).max(100).optional(),
 });
 
 export function PATCH(req: Request) {

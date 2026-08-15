@@ -34,6 +34,8 @@ export function POST(req: Request) {
           firstName: body.firstName,
           lastName: body.lastName ?? null,
           role: invite.role,
+          managerId: invite.managerId ?? null,
+          brokerageId: invite.brokerageId ?? null,
         },
       });
       await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });

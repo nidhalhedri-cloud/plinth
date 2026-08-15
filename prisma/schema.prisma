@@ -15,8 +15,12 @@ datasource db {
 
 enum Role {
   PLATFORM_ADMIN // cross-tenant (no company)
-  COMPANY_ADMIN  // one developer company
-  RM             // relationship / sales manager
+  COMPANY_ADMIN  // top of a developer company
+  VP             // reports to admin
+  SALES_DIRECTOR // reports to VP
+  TEAM_LEADER    // reports to sales director
+  RM             // relationship manager (front line)
+  BROKER         // external agency user (broker portal)
 }
 
 model Company {
@@ -40,6 +44,11 @@ model Company {
   fromName     String?
   remindersEnabled   Boolean @default(false)
   reminderDaysBefore Int     @default(7)
+  // Default commission rates + the % a buyer must have paid before broker commission is released.
+  // Overridable per project and per deal.
+  defaultBrokerCommission Decimal? @db.Decimal(6, 3)
+  defaultRmCommission     Decimal? @db.Decimal(6, 3)
+  brokerReleaseThreshold  Decimal  @default(20) @db.Decimal(6, 3)
   subscriptionStatus  String   @default("trialing")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -58,6 +67,7 @@ model Company {
   payments     Payment[]
   eois         Eoi[]
   clients      Client[]
+  meetings     Meeting[]
 }
 
 // A buyer/client of the developer — their contact + ID details, the units (deals) they hold, and
@@ -110,18 +120,25 @@ model User {
   firstName    String
   lastName     String?
   role         Role     @default(RM)
+  managerId    String?  // reports-to (org hierarchy: admin→VP→sales director→team leader→RM)
+  brokerageId  String?  // set for BROKER users (external agency login)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   company        Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager        User?            @relation("reports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports        User[]           @relation("reports")
+  brokerage      Brokerage?       @relation(fields: [brokerageId], references: [id], onDelete: SetNull)
   invitesSent    Invite[]         @relation("InvitedBy")
   brokerageLinks BrokerageLink[]
   offers         Offer[]
   waSession      WhatsappSession?
   waSendLogs     WhatsappSendLog[]
+  meetings       Meeting[]        @relation("MeetingRequestedBy")
 
   @@index([companyId])
+  @@index([managerId])
 }
 
 model Invite {
@@ -129,6 +146,8 @@ model Invite {
   companyId   String
   email       String
   role        Role      @default(RM)
+  managerId   String? // reports-to for the new staff member
+  brokerageId String? // set for BROKER invites (external agency user)
   token       String    @unique
   invitedById String?
   acceptedAt  DateTime?
@@ -160,6 +179,8 @@ model Brokerage {
   company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   links   BrokerageLink[]
   offers  Offer[]
+  users   User[]
+  meetings Meeting[]
 
   @@index([companyId])
 }
@@ -195,6 +216,10 @@ model Project {
   // RERA project escrow account — every buyer installment must be paid into it (Law No. 8 of 2007).
   escrowBank      String?
   escrowAccountNo String?
+  // Per-project commission overrides (fall back to the company defaults when null).
+  brokerCommission       Decimal? @db.Decimal(6, 3)
+  rmCommission           Decimal? @db.Decimal(6, 3)
+  brokerReleaseThreshold Decimal? @db.Decimal(6, 3)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -377,8 +402,9 @@ model Offer {
   paymentProofAssetId String? // uploaded proof of the booking payment
   // Schedule recomputed at booking from bookingStartDate, frozen onto the booking/SPA documents.
   bookingSnapshot     Json?
-  // Broker commission on this deal (developer pays the broker). Rate overrides the brokerage default.
+  // Broker commission on this deal (developer pays the broker). Rate overrides brokerage/project/company.
   commissionRate   Decimal? @db.Decimal(6, 3)
+  rmCommissionRate Decimal? @db.Decimal(6, 3) // the developer's RM commission on this deal
   commissionStatus String   @default("accrued") // accrued | invoiced | paid
   // DLD/Oqood registration of the SPA (must be registered within the DLD deadline after signing).
   oqoodStatus String    @default("pending") // pending | registered | title_deed
@@ -515,6 +541,27 @@ model Eoi {
 
   company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+}
+
+// ─────────────────────────── broker meetings (broker portal value-add) ───────────────────────────
+
+// A meeting/callback a broker requests with the developer from their portal.
+model Meeting {
+  id            String    @id @default(cuid())
+  companyId     String
+  brokerageId   String?
+  requestedById String
+  subject       String
+  preferredAt   DateTime?
+  note          String?
+  status        String    @default("requested") // requested | confirmed | done | declined
+  createdAt     DateTime  @default(now())
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  brokerage Brokerage? @relation(fields: [brokerageId], references: [id], onDelete: SetNull)
+  requestedBy User     @relation("MeetingRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
 
   @@index([companyId])
 }

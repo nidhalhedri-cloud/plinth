@@ -15,7 +15,7 @@ type Soa = {
   escrow: { bank: string | null; accountNo: string | null };
   payments: Pay[];
   totals: { contracted: number; collected: number; outstanding: number; overdueCount: number; overdueAmount: number };
-  commission: { rate: number | null; amount: number | null; status: string; brokerage: string | null };
+  commission: { rate: number | null; amount: number | null; status: string; brokerage: string | null; qualified: boolean; paidPercent: number; threshold: number | null; rmRate: number | null; rmAmount: number | null };
   deal: { oqoodStatus: string; oqoodRef: string | null; oqoodDate: string | null; handoverStatus: string; titleDeedRef: string | null };
 };
 
@@ -72,10 +72,16 @@ export default function SoaPage({ params }: { params: { offerId: string } }) {
       {/* Deal status */}
       <div className="grid md:grid-cols-3 gap-4 mt-4">
         <div className="card p-4">
-          <p className="text-sm font-semibold text-white mb-2">Commission</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-white">Commission</p>
+            {d.commission.rate != null && (d.commission.qualified
+              ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300">Broker qualified</span>
+              : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300">{d.commission.paidPercent}% / {d.commission.threshold}%</span>)}
+          </div>
+          <p className="text-[11px] text-slate-500">Broker {d.commission.brokerage ? `· ${d.commission.brokerage}` : ''}</p>
           <p className="text-lg font-bold text-white">{d.commission.amount != null ? money(d.commission.amount) : '—'} {d.commission.rate != null && <span className="text-xs text-slate-500">({d.commission.rate}%)</span>}</p>
-          <p className="text-[11px] text-slate-500 mb-2">{d.commission.brokerage || 'No brokerage'}</p>
-          <select className="field !py-1.5 text-xs" value={d.commission.status} onChange={e => patchDeal({ commissionStatus: e.target.value })}>
+          {d.commission.rmAmount != null && <p className="text-[11px] text-slate-400 mt-1">RM: {money(d.commission.rmAmount)} ({d.commission.rmRate}%)</p>}
+          <select className="field !py-1.5 text-xs mt-2" value={d.commission.status} onChange={e => patchDeal({ commissionStatus: e.target.value })}>
             {['accrued', 'invoiced', 'paid'].map(s => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
           </select>
         </div>
