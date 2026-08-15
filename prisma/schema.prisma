@@ -31,6 +31,15 @@ model Company {
   // Developer-authored terms shown on the generated Booking Form / SPA documents.
   bookingTerms        String?  @db.Text
   spaTerms            String?  @db.Text
+  // SMTP for automated buyer emails (the developer's own mailbox) + payment-reminder settings.
+  smtpHost     String?
+  smtpPort     Int?
+  smtpUser     String?
+  smtpPass     String?
+  fromEmail    String?
+  fromName     String?
+  remindersEnabled   Boolean @default(false)
+  reminderDaysBefore Int     @default(7)
   subscriptionStatus  String   @default("trialing")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -48,6 +57,28 @@ model Company {
   assets       Asset[]
   payments     Payment[]
   eois         Eoi[]
+  clients      Client[]
+}
+
+// A buyer/client of the developer — their contact + ID details, the units (deals) they hold, and
+// their uploaded documents (passport, Emirates ID, signed SPA, cheques, …).
+model Client {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  email     String?
+  phone     String?
+  idType    String? // id (Emirates ID) | passport
+  idNumber  String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  offers    Offer[]
+  documents Asset[]
+
+  @@index([companyId])
 }
 
 // Binary storage in Postgres — layout floor plans, company logos, generated offer PDFs. Keeps the
@@ -56,15 +87,19 @@ model Company {
 model Asset {
   id        String   @id @default(cuid())
   companyId String
-  kind      String   @default("layout") // layout | logo | offer_pdf
+  kind      String   @default("layout") // layout | logo | offer_pdf | client_doc | payment_proof
   mime      String
   bytes     Bytes
   size      Int
+  clientId  String? // set for client_doc uploads
+  label     String? // e.g. "Passport", "Signed SPA"
   createdAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client  Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+  @@index([clientId])
 }
 
 model User {
@@ -336,6 +371,7 @@ model Offer {
   clientAddress  String?
   clientIdType   String? // 'id' (Emirates ID) | 'passport'
   clientIdNumber String?
+  clientId       String? // linked Client record (created/linked at booking)
   // When the client starts paying — anchors the booking/SPA schedule (may differ from the offer date).
   bookingStartDate    DateTime?
   paymentProofAssetId String? // uploaded proof of the booking payment
@@ -363,6 +399,7 @@ model Offer {
   unit      Unit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
   brokerage Brokerage? @relation(fields: [brokerageId], references: [id], onDelete: SetNull)
   rm        User       @relation(fields: [rmUserId], references: [id], onDelete: Cascade)
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   sendLogs  WhatsappSendLog[]
   payments  Payment[]
 
@@ -436,6 +473,7 @@ model Payment {
   reference  String?
   toEscrow   Boolean       @default(true)
   status     PaymentStatus @default(DUE)
+  lastReminderAt DateTime? // last automated payment-reminder email sent to the buyer
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 

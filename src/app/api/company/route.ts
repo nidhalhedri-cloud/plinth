@@ -10,7 +10,7 @@ export function GET() {
     const u = await requireCompanyUser();
     const company = await prisma.company.findUnique({
       where: { id: u.companyId },
-      select: { name: true, slug: true, logoUrl: true, brandColor: true, primaryContactName: true, primaryContactEmail: true, bookingTerms: true, spaTerms: true },
+      select: { name: true, slug: true, logoUrl: true, brandColor: true, primaryContactName: true, primaryContactEmail: true, bookingTerms: true, spaTerms: true, smtpHost: true, smtpPort: true, smtpUser: true, fromEmail: true, fromName: true, remindersEnabled: true, reminderDaysBefore: true },
     });
     return { company };
   });
@@ -23,6 +23,14 @@ const Patch = z.object({
   primaryContactEmail: z.string().email().optional().or(z.literal('')),
   bookingTerms: z.string().optional(),
   spaTerms: z.string().optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.number().int().optional().nullable(),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
+  fromEmail: z.string().optional(),
+  fromName: z.string().optional(),
+  remindersEnabled: z.boolean().optional(),
+  reminderDaysBefore: z.number().int().min(0).max(60).optional(),
 });
 
 export function PATCH(req: Request) {

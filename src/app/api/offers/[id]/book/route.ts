@@ -43,6 +43,17 @@ export function POST(req: Request, { params }: { params: { id: string } }) {
 
     const bookingSnapshot = await computeOffer(db, companyId, offer.unitId, { discountAed, dldWaiver, planId, bookingDate: bookingStart });
 
+    // Attach the deal to a Client record (find by ID number / email, else create).
+    let clientId: string | null = null;
+    const found = clientIdNumber
+      ? await db.client.findFirst({ where: { idNumber: clientIdNumber }, select: { id: true } })
+      : clientEmail ? await db.client.findFirst({ where: { email: clientEmail }, select: { id: true } }) : null;
+    if (found) clientId = found.id;
+    else {
+      const c = await db.client.create({ data: { companyId, name: clientName, email: clientEmail, idType: clientIdType === 'passport' ? 'passport' : 'id', idNumber: clientIdNumber || null, address: clientAddress } });
+      clientId = c.id;
+    }
+
     const proof = await db.asset.create({
       data: { companyId, kind: 'payment_proof', mime: file.type || 'application/octet-stream', bytes: Buffer.from(await file.arrayBuffer()), size: file.size },
     });
@@ -53,6 +64,7 @@ export function POST(req: Request, { params }: { params: { id: string } }) {
         clientName, clientEmail, clientAddress,
         clientIdType: clientIdType === 'passport' ? 'passport' : 'id',
         clientIdNumber,
+        clientId,
         bookingStartDate: bookingStart,
         paymentProofAssetId: proof.id,
         bookingSnapshot: bookingSnapshot as unknown as Prisma.InputJsonValue,

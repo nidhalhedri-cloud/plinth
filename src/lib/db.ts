@@ -13,7 +13,7 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.__prisma = prisma;
 // session — never from request input.
 const TENANT_MODELS = new Set<string>([
   'User', 'Invite', 'Brokerage', 'BrokerageLink', 'Project', 'Layout', 'Unit',
-  'PaymentPlan', 'PaymentMilestone', 'FeeSetting', 'Offer', 'WhatsappSession', 'WhatsappSendLog', 'Asset', 'Payment', 'Eoi',
+  'PaymentPlan', 'PaymentMilestone', 'FeeSetting', 'Offer', 'WhatsappSession', 'WhatsappSendLog', 'Asset', 'Payment', 'Eoi', 'Client',
 ]);
 
 const WHERE_OPS = new Set([

@@ -86,6 +86,66 @@ export default function SettingsPage() {
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null} {saved ? 'Saved' : 'Save changes'}
         </button>
       </div>
+
+      <EmailReminders />
+    </div>
+  );
+}
+
+function EmailReminders() {
+  type C = { smtpHost: string | null; smtpPort: number | null; smtpUser: string | null; fromEmail: string | null; fromName: string | null; remindersEnabled: boolean; reminderDaysBefore: number };
+  const [c, setC] = useState<C | null>(null);
+  const [pass, setPass] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [run, setRun] = useState<string | null>(null);
+  const load = () => api<{ company: C }>('/api/company').then(r => setC(r.company));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!c) return;
+    setBusy(true);
+    try {
+      const body: Record<string, unknown> = { smtpHost: c.smtpHost || '', smtpPort: c.smtpPort ?? null, smtpUser: c.smtpUser || '', fromEmail: c.fromEmail || '', fromName: c.fromName || '', remindersEnabled: c.remindersEnabled, reminderDaysBefore: c.reminderDaysBefore };
+      if (pass) body.smtpPass = pass;
+      await api('/api/company', { method: 'PATCH', json: body });
+      setPass(''); setSaved(true); setTimeout(() => setSaved(false), 1500);
+    } finally { setBusy(false); }
+  };
+  const sendNow = async () => {
+    setRun('running');
+    try { const r = await api<{ candidates: number; sent: number; emailConfigured: boolean; noEmail: number }>('/api/reminders/run', { method: 'POST' });
+      setRun(r.emailConfigured ? `Sent ${r.sent} reminder(s)${r.noEmail ? `, ${r.noEmail} buyer(s) have no email` : ''}.` : `${r.candidates} reminder(s) are due — add SMTP settings above to actually send them.`);
+    } catch (e) { setRun((e as Error).message); }
+  };
+
+  if (!c) return null;
+  return (
+    <div className="card p-6 mt-6 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-white">Automated payment reminders</h2>
+        <p className="text-xs text-slate-400 mt-0.5">Emails buyers about due/overdue installments (paid ones are skipped). Sent from your own mailbox.</p>
+      </div>
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input type="checkbox" checked={c.remindersEnabled} onChange={e => setC({ ...c, remindersEnabled: e.target.checked })} className="accent-indigo-500" />
+        Send reminders automatically
+        <span className="text-xs text-slate-500 ml-2">starting</span>
+        <input type="number" className="field !w-16 !py-1" value={c.reminderDaysBefore} onChange={e => setC({ ...c, reminderDaysBefore: Number(e.target.value) })} />
+        <span className="text-xs text-slate-500">days before due</span>
+      </label>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div><label className="label">SMTP host</label><input className="field" value={c.smtpHost || ''} onChange={e => setC({ ...c, smtpHost: e.target.value })} placeholder="smtp.gmail.com" /></div>
+        <div><label className="label">Port</label><input className="field" type="number" value={c.smtpPort ?? ''} onChange={e => setC({ ...c, smtpPort: e.target.value ? Number(e.target.value) : null })} placeholder="587" /></div>
+        <div><label className="label">SMTP username</label><input className="field" value={c.smtpUser || ''} onChange={e => setC({ ...c, smtpUser: e.target.value })} /></div>
+        <div><label className="label">SMTP password</label><input className="field" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder={c.smtpUser ? '•••••• (unchanged)' : ''} /></div>
+        <div><label className="label">From email</label><input className="field" value={c.fromEmail || ''} onChange={e => setC({ ...c, fromEmail: e.target.value })} placeholder="sales@yourcompany.com" /></div>
+        <div><label className="label">From name</label><input className="field" value={c.fromName || ''} onChange={e => setC({ ...c, fromName: e.target.value })} /></div>
+      </div>
+      {run && <p className="text-sm text-slate-300">{run === 'running' ? 'Running…' : run}</p>}
+      <div className="flex gap-2">
+        <button className="btn-primary" onClick={save} disabled={busy}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null} {saved ? 'Saved' : 'Save'}</button>
+        <button className="btn-ghost" onClick={sendNow}>Send reminders now</button>
+      </div>
     </div>
   );
 }
