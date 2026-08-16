@@ -3,6 +3,7 @@ import { tenantDb } from '@/lib/db';
 import { requireCompanyUser } from '@/lib/auth';
 import { route, token } from '@/lib/http';
 import { computeOffer } from '@/lib/offer';
+import { visibleOwnerIds } from '@/lib/hierarchy';
 import type { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,9 @@ export function GET() {
   return route(async () => {
     const u = await requireCompanyUser();
     const db = tenantDb(u.companyId);
-    const where: Prisma.OfferWhereInput = u.role === 'RM' ? { rmUserId: u.id } : {};
+    // Admins see all; a manager sees their whole subtree's deals; an RM sees their own.
+    const owners = await visibleOwnerIds(db, u);
+    const where: Prisma.OfferWhereInput = owners ? { rmUserId: { in: owners } } : {};
     const offers = await db.offer.findMany({
       where,
       orderBy: { createdAt: 'desc' },

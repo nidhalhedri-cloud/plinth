@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { tenantDb } from '@/lib/db';
 import { requireCompanyUser, HttpError } from '@/lib/auth';
 import { route } from '@/lib/http';
+import { visibleOwnerIds } from '@/lib/hierarchy';
 import type { OfferSnapshot } from '@/lib/offer';
 
 export const runtime = 'nodejs';
@@ -15,7 +16,8 @@ export function GET(_req: Request, { params }: { params: { id: string } }) {
       include: { unit: { select: { unitNumber: true, id: true } }, brokerage: { select: { name: true, id: true } } },
     });
     if (!o) throw new HttpError(404, 'Offer not found');
-    if (u.role === 'RM' && o.rmUserId !== u.id) throw new HttpError(403, 'Not your offer');
+    const owners = await visibleOwnerIds(db, u);
+    if (owners && !owners.includes(o.rmUserId)) throw new HttpError(403, 'Not your offer');
     return {
       offer: {
         id: o.id, status: o.status, publicToken: o.publicToken, note: o.note,
@@ -39,7 +41,8 @@ export function PATCH(req: Request, { params }: { params: { id: string } }) {
 
     const o = await db.offer.findFirst({ where: { id: params.id }, select: { id: true, rmUserId: true, unitId: true } });
     if (!o) throw new HttpError(404, 'Offer not found');
-    if (u.role === 'RM' && o.rmUserId !== u.id) throw new HttpError(403, 'Not your offer');
+    const owners = await visibleOwnerIds(db, u);
+    if (owners && !owners.includes(o.rmUserId)) throw new HttpError(403, 'Not your offer');
 
     const now = new Date();
     await db.offer.updateMany({

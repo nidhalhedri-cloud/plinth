@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Building2, Boxes, Layers, Wallet, Receipt, FileText, Users, LogOut, Settings, Coins, ClipboardList, Contact,
 } from 'lucide-react';
 
-type Item = { href: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; soon?: boolean };
+type Item = { href: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; managerOnly?: boolean; soon?: boolean };
 
 const NAV: Item[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -21,7 +21,7 @@ const NAV: Item[] = [
   { href: '/offers', label: 'Offers', icon: FileText },
   { href: '/collections', label: 'Collections', icon: Coins, adminOnly: true },
   { href: '/clients', label: 'Clients', icon: Contact, adminOnly: true },
-  { href: '/team', label: 'Team', icon: Users, adminOnly: true },
+  { href: '/team', label: 'Team', icon: Users, managerOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings, adminOnly: true },
 ];
 
@@ -29,6 +29,7 @@ export function Sidebar({ user, company }: { user: { firstName: string; role: Ro
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = user.role === 'COMPANY_ADMIN' || user.role === 'PLATFORM_ADMIN';
+  const canTeam = isAdmin || ['VP', 'SALES_DIRECTOR', 'TEAM_LEADER'].includes(user.role);
 
   const logout = async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); router.push('/login'); router.refresh(); };
   const active = (href: string) => pathname === href || pathname.startsWith(href + '/');
@@ -44,7 +45,7 @@ export function Sidebar({ user, company }: { user: { firstName: string; role: Ro
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {NAV.filter(i => !i.adminOnly || isAdmin).map(i => {
+        {NAV.filter(i => (i.adminOnly ? isAdmin : i.managerOnly ? canTeam : true)).map(i => {
           const Icon = i.icon;
           return (
             <Link key={i.href} href={i.soon ? '#' : i.href}
