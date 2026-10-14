@@ -70,7 +70,7 @@ export async function connect(rmUserId: string, companyId: string): Promise<{ st
     const { state, saveCreds, baileys } = await loadAuth(rmUserId, companyId);
     const makeWASocket = baileys.default as unknown as (config: unknown) => WaSock;
     const { DisconnectReason } = baileys;
-    const sock = makeWASocket({ auth: state, printQRInTerminal: false, browser: ['Developer CRM', 'Chrome', '1.0'], syncFullHistory: false });
+    const sock = makeWASocket({ auth: state, printQRInTerminal: false, browser: ['Plinth', 'Chrome', '1.0'], syncFullHistory: false });
     sessions.set(rmUserId, { sock, status: 'connecting', qr: null, lastSendAt: 0 });
 
     sock.ev.on('creds.update', saveCreds);

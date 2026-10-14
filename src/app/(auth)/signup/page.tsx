@@ -23,7 +23,7 @@ export default function SignupPage() {
   };
 
   return (
-    <AuthShell title="Create your workspace" subtitle="Developer CRM">
+    <AuthShell title="Create your workspace" subtitle="Plinth · Developer OS">
       <form onSubmit={submit} className="space-y-3">
         <div>
           <label className="label">Company name</label>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/client';
+import { PlinthMark } from '@/components/plinth-logo';
 import type { Role } from '@prisma/client';
 import {
   LayoutDashboard, Building2, Boxes, Layers, Wallet, Receipt, FileText, Users, LogOut, Settings, Coins, ClipboardList, Contact,
@@ -37,10 +38,10 @@ export function Sidebar({ user, company }: { user: { firstName: string; role: Ro
   return (
     <aside className="w-60 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0">
       <div className="h-16 flex items-center gap-2.5 px-4 border-b border-slate-800">
-        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-sm">D</div>
+        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white"><PlinthMark size={18} /></div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{company?.name || 'Developer CRM'}</p>
-          <p className="text-[11px] text-slate-500">Developer CRM</p>
+          <p className="text-sm font-semibold text-white truncate">{company?.name || 'Plinth'}</p>
+          <p className="text-[11px] text-slate-500">Plinth · Developer OS</p>
         </div>
       </div>
 

@@ -22,7 +22,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell title="Sign in" subtitle="Developer CRM">
+    <AuthShell title="Sign in" subtitle="Plinth · Developer OS">
       <form onSubmit={submit} className="space-y-3">
         <div>
           <label className="label">Email</label>

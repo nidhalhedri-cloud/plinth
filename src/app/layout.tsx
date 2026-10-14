@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Developer CRM',
-  description: 'Inventory, offers & broker WhatsApp for Dubai real-estate developers.',
+  title: 'Plinth · Developer OS',
+  description: 'Plinth — the developer sales & collections platform for Dubai: inventory, offers, booking, SPA, escrow collections and handover.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

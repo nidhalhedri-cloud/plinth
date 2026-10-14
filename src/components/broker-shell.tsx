@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/client';
 import { Users, Boxes, CalendarClock, LogOut } from 'lucide-react';
+import { PlinthMark } from '@/components/plinth-logo';
 
 const NAV = [
   { href: '/broker', label: 'My clients', icon: Users, exact: true },
@@ -21,7 +22,7 @@ export function BrokerShell({ developer, brokerage, children }: { developer: str
     <div className="min-h-screen">
       <header className="h-14 border-b border-slate-800 bg-slate-900 flex items-center px-4 gap-4 sticky top-0 z-10">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">D</div>
+          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white"><PlinthMark size={15} /></div>
           <div className="leading-tight"><p className="text-sm font-semibold text-white">{developer}</p><p className="text-[10px] text-slate-500">Broker portal{brokerage ? ` · ${brokerage}` : ''}</p></div>
         </div>
         <nav className="flex items-center gap-1 ml-4">
